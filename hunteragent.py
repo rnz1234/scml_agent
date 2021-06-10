@@ -54,6 +54,7 @@ You should see a short tournament running and results reported.
 
 """
 
+
 # required for development
 from scml.oneshot import OneShotAgent
 
@@ -85,6 +86,22 @@ from scml.oneshot.agents import (
 import sys
 import math
 import numpy as np
+
+
+import argparse
+import csv
+
+parser = argparse.ArgumentParser()
+parser.add_argument('start_price_type',type=float)
+parser.add_argument('price_delta_down',type=float)
+parser.add_argument('price_delta_up',type=float)
+parser.add_argument('profit_epsilon',type=float)
+parser.add_argument('acceptance_price_th',type=float)
+parser.add_argument('acceptance_quantity_th',type=float)
+parser.add_argument('cutoff_rate',type=float)
+parser.add_argument('cutoff_precentile',type=float)
+parser.add_argument('cutoff_stop_amount',type=float)
+args = parser.parse_args()
 
 """
 Notes:
@@ -125,6 +142,7 @@ class OFFER_FIELD_IDX:
 
 class START_PRICE_TYPE:
     SIMPLE_AVG = 0
+    GREEDY_START = 1
 
 class HunterAgent(OneShotAgent):
 
@@ -132,30 +150,51 @@ class HunterAgent(OneShotAgent):
     # every exporation_epoch steps, the price delta for exploration is mult by greediness_rate   
     # every 1/cut_off rate steps, cutoff_ratio of the opposites which yields the agent the worst acculated income, are cut from propose negotiation 
     # idea : overbooking rate (put more quantity than available)
-    def init(self, start_price_type=START_PRICE_TYPE.SIMPLE_AVG, price_delta_down=0.5, price_delta_up=1, profit_epsilon=0.1, acceptance_price_th=0.1, acceptance_quantity_th=0.1, cutoff_rate=0.2, cutoff_precentile=0.2, cutoff_stop_amount=1):
+    def init(self): #, start_price_type=START_PRICE_TYPE.SIMPLE_AVG, price_delta_down=0.5, price_delta_up=1, profit_epsilon=0.1, acceptance_price_th=0.1, acceptance_quantity_th=0.1, cutoff_rate=0.2, cutoff_precentile=0.2, cutoff_stop_amount=1):
+        # self.secured = 0
+        # self.start_price_type = start_price_type
+        # self.price_delta_down = price_delta_down
+        # self.price_delta_up = price_delta_up
+        # self.profit_epsilon = profit_epsilon
+        # self.acceptance_price_th = acceptance_price_th
+        # self.acceptance_quantity_th = acceptance_quantity_th
+        # self.current_agreed_price = dict()
+        # self.next_proposed_price = dict()
+        # self.started = dict()
+        # self.finished = []
+        # self.opposites = -1
+        # self.cutoff_rate = cutoff_rate
+        # self.cutoff_precentile = cutoff_precentile
+        # self.cutoff_stop_amount = cutoff_stop_amount
+        # self.opposite_price_gap = dict()
+        
+
         self.secured = 0
-        self.start_price_type = start_price_type
-        self.price_delta_down = price_delta_down
-        self.price_delta_up = price_delta_up
-        self.profit_epsilon = profit_epsilon
-        self.acceptance_price_th = acceptance_price_th
-        self.acceptance_quantity_th = acceptance_quantity_th
+        self.start_price_type = args.start_price_type
+        self.price_delta_down = args.price_delta_down
+        self.price_delta_up = args.price_delta_up
+        self.profit_epsilon = args.profit_epsilon
+        self.acceptance_price_th = args.acceptance_price_th
+        self.acceptance_quantity_th = args.acceptance_quantity_th
         self.current_agreed_price = dict()
         self.next_proposed_price = dict()
         self.started = dict()
         self.finished = []
         self.opposites = -1
-        self.cutoff_rate = cutoff_rate
-        self.cutoff_precentile = cutoff_precentile
-        self.cutoff_stop_amount = cutoff_stop_amount
+        self.cutoff_rate = args.cutoff_rate
+        self.cutoff_precentile = args.cutoff_precentile
+        self.cutoff_stop_amount = args.cutoff_stop_amount
+        self.opposite_price_gap = dict()
+        self.success = 0 
+        self.failure = 0
         
 
     def step(self):
+        #print("s: " + str(self.success) + ", f: " + str(self.failure))
         self.secured = 0
         self.price_delta_up = float(self.price_delta_up)/2 # may change 2 to be some hyperparameter
         self.price_delta_down = float(self.price_delta_down)/2 # may change 2 to be some hyperparameter
 
-        
         if self.opposites == self.cutoff_stop_amount:
             return
 
@@ -171,6 +210,7 @@ class HunterAgent(OneShotAgent):
 
     # when we succeed
     def on_negotiation_success(self, contract, mechanism):
+        self.success += 1
         self.secured += contract.agreement["quantity"]
         if self._is_selling(mechanism):
             partner = contract.annotation["buyer"]
@@ -182,12 +222,13 @@ class HunterAgent(OneShotAgent):
         # update price
         self.current_agreed_price[partner] = contract.agreement["unit_price"]
         if self._is_selling(mechanism):
-            self.next_proposed_price[partner] = contract.agreement["unit_price"] + self.price_delta_up
-        else:
-            self.next_proposed_price[partner] = contract.agreement["unit_price"] - self.price_delta_down
+            self.next_proposed_price[partner] = contract.agreement["unit_price"] + self.price_delta_up*self.opposite_price_gap[partner]
+        else: 
+            self.next_proposed_price[partner] = contract.agreement["unit_price"] - self.price_delta_down*self.opposite_price_gap[partner]
 
     # when we fail
     def on_negotiation_failure(self, partners, annotation, mechanism, state):
+        self.failure += 1
         my_needs = self._needed()
         if my_needs <= 0:
             DEBUG_PRINT("No more needs !")
@@ -203,9 +244,9 @@ class HunterAgent(OneShotAgent):
 
         # update price
         if self._is_selling(mechanism):
-            self.next_proposed_price[partner] -= self.price_delta_down
+            self.next_proposed_price[partner] -= self.price_delta_down*self.opposite_price_gap[partner]
         else:
-            self.next_proposed_price[partner] += self.price_delta_up
+            self.next_proposed_price[partner] += self.price_delta_up*self.opposite_price_gap[partner]
 
     def propose(self, negotiator_id: str, state) -> "Outcome":
         DEBUG_PRINT("propose " + negotiator_id)
@@ -232,7 +273,15 @@ class HunterAgent(OneShotAgent):
             # first proposal with this negotiator
             self.started[partner] = True
             if self.start_price_type == START_PRICE_TYPE.SIMPLE_AVG:
+                self.opposite_price_gap[partner] = unit_price_issue.max_value-unit_price_issue.min_value
                 offer[OFFER_FIELD_IDX.UNIT_PRICE] = float(unit_price_issue.min_value + unit_price_issue.max_value)/2
+            elif self.start_price_type == START_PRICE_TYPE.GREEDY_START:
+                if self._is_selling(ami):
+                    self.opposite_price_gap[partner] = unit_price_issue.max_value-unit_price_issue.min_value
+                    offer[OFFER_FIELD_IDX.UNIT_PRICE] = unit_price_issue.max_value
+                else:
+                    self.opposite_price_gap[partner] = unit_price_issue.max_value-unit_price_issue.min_value
+                offer[OFFER_FIELD_IDX.UNIT_PRICE] = unit_price_issue.min_value
             else:
                 print("FATAL : unsupported init price method - crash")
                 sys.exit(1)
@@ -296,8 +345,10 @@ class HunterAgent(OneShotAgent):
             #     return ResponseType.REJECT_OFFER
             # else:
             if offer[OFFER_FIELD_IDX.UNIT_PRICE] > cur_price - self.acceptance_price_th and \
-                abs(offer[OFFER_FIELD_IDX.QUANTITY] - float(self._needed())/self.opposites):
+                offer[OFFER_FIELD_IDX.QUANTITY] <= float(self._needed()/self.opposites) and \
+                offer[OFFER_FIELD_IDX.QUANTITY] >= (float(self._needed())/self.opposites)*(1-self.acceptance_quantity_th):
                     # TODO : check if we need to set the below (not needed in case on_negotiation_success() is called)
+                    self.opposite_price_gap[partner] = unit_price_issue.max_value-unit_price_issue.min_value
                     self.current_agreed_price[partner] = offer[OFFER_FIELD_IDX.UNIT_PRICE]
                     #self.next_proposed_price[negotiator_id] = offer[OFFER_FIELD_IDX.UNIT_PRICE] + self.price_delta
                     return ResponseType.ACCEPT_OFFER
@@ -310,8 +361,10 @@ class HunterAgent(OneShotAgent):
             # if offer[OFFER_FIELD_IDX.UNIT_PRICE] > unit_price_issue.max_value:
             #     return ResponseType.REJECT_OFFER
             if offer[OFFER_FIELD_IDX.UNIT_PRICE] < cur_price + self.acceptance_price_th and \
-                abs(offer[OFFER_FIELD_IDX.QUANTITY] - float(self._needed())/self.opposites):
+                offer[OFFER_FIELD_IDX.QUANTITY] <= float(self._needed()/self.opposites) and \
+                offer[OFFER_FIELD_IDX.QUANTITY] >= (float(self._needed())/self.opposites)*(1-self.acceptance_quantity_th):
                     # TODO : check if we need to set the below (not needed in case on_negotiation_success() is called)
+                    self.opposite_price_gap[partner] = unit_price_issue.max_value-unit_price_issue.min_value
                     self.current_agreed_price[partner] = offer[OFFER_FIELD_IDX.UNIT_PRICE]
                     #self.next_proposed_price[negotiator_id] = offer[OFFER_FIELD_IDX.UNIT_PRICE] - self.price_delta
                     return ResponseType.ACCEPT_OFFER
@@ -384,9 +437,9 @@ def run(
             HunterAgent, 
             #RandomOneShotAgent, 
             #SyncRandomOneShotAgent,
-            SimpleAgent, 
-            BetterAgent,
-            AdaptiveAgent,
+            # SimpleAgent, 
+            # BetterAgent,
+            # AdaptiveAgent,
             LearningAgent
         ]
     else:
@@ -419,9 +472,20 @@ def run(
     # display results
     print(tabulate(results.total_scores, headers="keys", tablefmt="psql"))
     print(f"Finished in {humanize_time(time.perf_counter() - start)}")
+    scores_df = results.total_scores
+    max_score = scores_df['score'].max()
+    final_score = scores_df[scores_df['agent_type']=='HunterAgent']['score'].values[0]
+    place = scores_df[scores_df['agent_type']=='HunterAgent']['score'].index[0]
+    values = [args.start_price_type,args.price_delta_down,args.price_delta_up,args.profit_epsilon,
+            args.acceptance_price_th,args.acceptance_quantity_th,args.cutoff_rate,args.cutoff_precentile,
+            args.cutoff_stop_amount,final_score-max_score]#place,final_score]
+    with open(r'parametrs_scores.csv','a') as f:
+        writer = csv.writer(f)
+        writer.writerow(values)
+    print(f"Finished in {humanize_time(time.perf_counter() - start)}")
 
+#if __name__ == "__main__":
+import sys
 
-if __name__ == "__main__":
-    import sys
-
-    run(sys.argv[1] if len(sys.argv) > 1 else "oneshot")
+run("oneshot")
+#run(sys.argv[1] if len(sys.argv) > 1 else "oneshot")
