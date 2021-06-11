@@ -193,7 +193,7 @@ class HunterAgent(OneShotAgent):
         self.profit = 0
         self.price_delta_up_context = dict()
         self.price_delta_down_context = dict()
-        self.exploration_rate = 0.4
+        self.exploration_rate = 0.2
         
 
     def step(self):
@@ -206,25 +206,25 @@ class HunterAgent(OneShotAgent):
         
         self.secured = 0
         
-        if self.opposites == self.cutoff_stop_amount:
-            return
+        # if self.opposites == self.cutoff_stop_amount:
+        #     return
 
         # cutoff
-        if self.awi.current_step > 0:
-            if self.awi.current_step % int(math.ceil(1.0/self.cutoff_rate)) == 0:
-                if self.current_agreed_price != {}:
-                    precentile_price = np.percentile(np.array(list(self.current_agreed_price.values())), self.cutoff_precentile)
-                    for partner in self.current_agreed_price.keys():
-                        if self.current_agreed_price[partner] < precentile_price:
-                            if self.opposites == self.cutoff_stop_amount:
-                                return  
-                            self.finished.append(partner) 
-                            self.opposites -= 1
+        # if self.awi.current_step > 0:
+        #     if self.awi.current_step % int(math.ceil(1.0/self.cutoff_rate)) == 0:
+        #         if self.current_agreed_price != {}:
+        #             precentile_price = np.percentile(np.array(list(self.current_agreed_price.values())), self.cutoff_precentile)
+        #             for partner in self.current_agreed_price.keys():
+        #                 if self.current_agreed_price[partner] < precentile_price:
+        #                     if self.opposites == self.cutoff_stop_amount:
+        #                         return  
+        #                     self.finished.append(partner) 
+        #                     self.opposites -= 1
 
         # enable exploration again 
         if self.awi.current_step > 0:
             if self.awi.current_step % int(math.ceil(1.0/self.exploration_rate)) == 0:
-                print("exploring!")
+                #print("exploring!")
                 for partner in self.price_delta_up_context:
                     self.price_delta_up_context[partner] = self.price_delta_up 
                     self.price_delta_down_context[partner] = self.price_delta_down
@@ -470,7 +470,7 @@ from agents_pool import * #SimpleAgent, BetterAgent, LearningAgent, AdaptiveAgen
 def run(
     competition="oneshot",
     reveal_names=True,
-    n_steps=20,
+    n_steps=50,
     n_configs=2,
 ):
     """
@@ -497,13 +497,13 @@ def run(
     if competition == "oneshot":
         competitors = [
             HunterAgent, 
-            #GreedyOneShotAgent,
+            GreedyOneShotAgent,
             #RandomOneShotAgent, 
             #SyncRandomOneShotAgent,
             # SimpleAgent, 
             # BetterAgent,
             # AdaptiveAgent,
-            LearningAgent
+            #LearningAgent
         ]
     else:
         from scml.scml2020.agents import DecentralizingAgent, BuyCheapSellExpensiveAgent
