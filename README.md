@@ -2,11 +2,15 @@ Our Agent (HunterAgent)
 ==================================
 
 To run the simulation:
-python3 hunteragent.py
+python3 hunteragent.py <parameters>
 
+To run parameters sweeper:
+python3 runParameters.py
+  
 Features:
 - search for best price (kind of bunary search for now)
 - "genetic" cutoff every number of steps according to configured rate to have only most profitable accounts
+
 
 
 SCML 2021 Agent Skeleton (OneShot)
