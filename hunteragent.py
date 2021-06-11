@@ -129,6 +129,8 @@ search (learning based) like generalized speedy q-learning
 
 """
 
+import random
+
 DEBUG = False#True
 
 def DEBUG_PRINT(msg):
@@ -143,6 +145,7 @@ class OFFER_FIELD_IDX:
 class START_PRICE_TYPE:
     SIMPLE_AVG = 0
     GREEDY_START = 1
+    GREEDY_RANDOM_START = 2
 
 class HunterAgent(OneShotAgent):
 
@@ -187,30 +190,49 @@ class HunterAgent(OneShotAgent):
         self.opposite_price_gap = dict()
         self.success = 0 
         self.failure = 0
+        self.profit = 0
+        self.price_delta_up_context = dict()
+        self.price_delta_down_context = dict()
+        self.exploration_rate = 0.4
         
 
     def step(self):
-        #print("s: " + str(self.success) + ", f: " + str(self.failure))
+        # if self.awi.current_step == 0:
+        #     print("-----------------------------------------------")
+        # print("# STEP : " + str(self.awi.current_step))
+        # print("s: " + str(self.success) + ", f: " + str(self.failure))
+        # print(self.current_agreed_price)
+        # print("profit: " + str(self.profit))
+        
         self.secured = 0
-        self.price_delta_up = float(self.price_delta_up)/2 # may change 2 to be some hyperparameter
-        self.price_delta_down = float(self.price_delta_down)/2 # may change 2 to be some hyperparameter
-
+        
         if self.opposites == self.cutoff_stop_amount:
             return
 
         # cutoff
-        if self.awi.current_step % int(math.ceil(1.0/self.cutoff_rate)) == int(math.ceil(1.0/self.cutoff_rate)):
-            precentile_price = np.percentile(np.array(self.current_agreed_price.values()), self.cutoff_precentile)
-            for partner in self.current_agreed_price.keys():
-                if self.current_agreed_price[partner] < precentile_price:
-                    if self.opposites == self.cutoff_stop_amount:
-                        return  
-                    self.finished.append(partner) 
-                    self.opposites -= 1
+        if self.awi.current_step > 0:
+            if self.awi.current_step % int(math.ceil(1.0/self.cutoff_rate)) == 0:
+                if self.current_agreed_price != {}:
+                    precentile_price = np.percentile(np.array(list(self.current_agreed_price.values())), self.cutoff_precentile)
+                    for partner in self.current_agreed_price.keys():
+                        if self.current_agreed_price[partner] < precentile_price:
+                            if self.opposites == self.cutoff_stop_amount:
+                                return  
+                            self.finished.append(partner) 
+                            self.opposites -= 1
+
+        # enable exploration again 
+        if self.awi.current_step > 0:
+            if self.awi.current_step % int(math.ceil(1.0/self.exploration_rate)) == 0:
+                print("exploring!")
+                for partner in self.price_delta_up_context:
+                    self.price_delta_up_context[partner] = self.price_delta_up 
+                    self.price_delta_down_context[partner] = self.price_delta_down
 
     # when we succeed
     def on_negotiation_success(self, contract, mechanism):
         self.success += 1
+        self.profit += contract.agreement["unit_price"]*contract.agreement["quantity"]
         self.secured += contract.agreement["quantity"]
         if self._is_selling(mechanism):
             partner = contract.annotation["buyer"]
@@ -219,12 +241,22 @@ class HunterAgent(OneShotAgent):
 
         DEBUG_PRINT("on_negotiation_success " + partner)
         
+        if partner not in self.price_delta_up_context:
+            self.price_delta_up_context[partner] = float(self.price_delta_up)/2 # may change 2 to be some hyperparameter
+            self.price_delta_down_context[partner] = float(self.price_delta_down)/2 # may change 2 to be some hyperparameter
+        else:
+            self.price_delta_up_context[partner] = float(self.price_delta_up_context[partner])/2 # may change 2 to be some hyperparameter
+            self.price_delta_down_context[partner] = float(self.price_delta_down_context[partner])/2 # may change 2 to be some hyperparameter
+
+
         # update price
         self.current_agreed_price[partner] = contract.agreement["unit_price"]
         if self._is_selling(mechanism):
-            self.next_proposed_price[partner] = contract.agreement["unit_price"] + self.price_delta_up*self.opposite_price_gap[partner]
+            self.next_proposed_price[partner] = contract.agreement["unit_price"] + self.price_delta_up_context[partner]*self.opposite_price_gap[partner]
         else: 
-            self.next_proposed_price[partner] = contract.agreement["unit_price"] - self.price_delta_down*self.opposite_price_gap[partner]
+            self.next_proposed_price[partner] = contract.agreement["unit_price"] - self.price_delta_down_context[partner]*self.opposite_price_gap[partner]
+
+        
 
     # when we fail
     def on_negotiation_failure(self, partners, annotation, mechanism, state):
@@ -242,12 +274,22 @@ class HunterAgent(OneShotAgent):
 
         DEBUG_PRINT("on_negotiation_failure " + partner)
 
+        if partner not in self.price_delta_up_context:
+            self.price_delta_up_context[partner] = float(self.price_delta_up)/2 # may change 2 to be some hyperparameter
+            self.price_delta_down_context[partner] = float(self.price_delta_down)/2 # may change 2 to be some hyperparameter
+        else:
+            self.price_delta_up_context[partner] = float(self.price_delta_up_context[partner])/2 # may change 2 to be some hyperparameter
+            self.price_delta_down_context[partner] = float(self.price_delta_down_context[partner])/2 # may change 2 to be some hyperparameter
+
+
+
         # update price
         if self._is_selling(mechanism):
-            self.next_proposed_price[partner] -= self.price_delta_down*self.opposite_price_gap[partner]
+            self.next_proposed_price[partner] -= self.price_delta_down_context[partner]*self.opposite_price_gap[partner]
         else:
-            self.next_proposed_price[partner] += self.price_delta_up*self.opposite_price_gap[partner]
+            self.next_proposed_price[partner] += self.price_delta_up_context[partner]*self.opposite_price_gap[partner]
 
+        
     def propose(self, negotiator_id: str, state) -> "Outcome":
         DEBUG_PRINT("propose " + negotiator_id)
         my_needs = self._needed(negotiator_id)
@@ -278,10 +320,18 @@ class HunterAgent(OneShotAgent):
             elif self.start_price_type == START_PRICE_TYPE.GREEDY_START:
                 if self._is_selling(ami):
                     self.opposite_price_gap[partner] = unit_price_issue.max_value-unit_price_issue.min_value
-                    offer[OFFER_FIELD_IDX.UNIT_PRICE] = unit_price_issue.max_value
+                    offer[OFFER_FIELD_IDX.UNIT_PRICE] = unit_price_issue.max_value#*1.5
                 else:
                     self.opposite_price_gap[partner] = unit_price_issue.max_value-unit_price_issue.min_value
-                offer[OFFER_FIELD_IDX.UNIT_PRICE] = unit_price_issue.min_value
+                    offer[OFFER_FIELD_IDX.UNIT_PRICE] = unit_price_issue.min_value#*0.5
+            elif self.start_price_type == START_PRICE_TYPE.GREEDY_RANDOM_START:
+                if self._is_selling(ami):
+                    self.opposite_price_gap[partner] = unit_price_issue.max_value-unit_price_issue.min_value
+                    offer[OFFER_FIELD_IDX.UNIT_PRICE] = unit_price_issue.max_value-random.random()*(unit_price_issue.max_value-unit_price_issue.min_value)#*1.5
+                else:
+                    self.opposite_price_gap[partner] = unit_price_issue.max_value-unit_price_issue.min_value
+                    offer[OFFER_FIELD_IDX.UNIT_PRICE] = unit_price_issue.min_value+random.random()*(unit_price_issue.max_value-unit_price_issue.min_value)#*0.5
+                
             else:
                 print("FATAL : unsupported init price method - crash")
                 sys.exit(1)
@@ -327,6 +377,18 @@ class HunterAgent(OneShotAgent):
         unit_price_issue = ami.issues[OFFER_FIELD_IDX.UNIT_PRICE]
         if self.start_price_type == START_PRICE_TYPE.SIMPLE_AVG:
             start_price = float(unit_price_issue.min_value + unit_price_issue.max_value)/2
+        elif self.start_price_type == START_PRICE_TYPE.GREEDY_START:
+            #start_price = float(unit_price_issue.min_value + unit_price_issue.max_value)/2
+            if self._is_selling(ami):
+                start_price = unit_price_issue.max_value
+            else:
+                start_price = unit_price_issue.min_value
+        elif self.start_price_type == START_PRICE_TYPE.GREEDY_RANDOM_START:
+            #start_price = float(unit_price_issue.min_value + unit_price_issue.max_value)/2
+            if self._is_selling(ami):
+                start_price = unit_price_issue.max_value - random.random()*(unit_price_issue.max_value-unit_price_issue.min_value)
+            else:
+                start_price = unit_price_issue.min_value + random.random()*(unit_price_issue.max_value-unit_price_issue.min_value)
         else:
             print("FATAL : unsupported init price method - crash")
             sys.exit(1)
@@ -402,13 +464,13 @@ class HunterAgent(OneShotAgent):
 
 
 
-from agents_pool import SimpleAgent, BetterAgent, LearningAgent, AdaptiveAgent
+from agents_pool import * #SimpleAgent, BetterAgent, LearningAgent, AdaptiveAgent
 
 
 def run(
     competition="oneshot",
     reveal_names=True,
-    n_steps=10,
+    n_steps=20,
     n_configs=2,
 ):
     """
@@ -435,6 +497,7 @@ def run(
     if competition == "oneshot":
         competitors = [
             HunterAgent, 
+            #GreedyOneShotAgent,
             #RandomOneShotAgent, 
             #SyncRandomOneShotAgent,
             # SimpleAgent, 
@@ -473,7 +536,7 @@ def run(
     print(tabulate(results.total_scores, headers="keys", tablefmt="psql"))
     print(f"Finished in {humanize_time(time.perf_counter() - start)}")
     scores_df = results.total_scores
-    max_score = scores_df['score'].max()
+    max_score = scores_df[scores_df['agent_type']!='HunterAgent']['score'].max()
     final_score = scores_df[scores_df['agent_type']=='HunterAgent']['score'].values[0]
     place = scores_df[scores_df['agent_type']=='HunterAgent']['score'].index[0]
     values = [args.start_price_type,args.price_delta_down,args.price_delta_up,args.profit_epsilon,

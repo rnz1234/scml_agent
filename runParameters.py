@@ -33,17 +33,20 @@ import os
 
 from agents_pool import SimpleAgent, BetterAgent, LearningAgent, AdaptiveAgent
 
-price_delta_up_range = np.arange(1,5,0.5)
-price_delta_down_range = np.arange(1,5,0.5)
+price_delta_up_range = np.arange(1, 3, 0.5) #np.arange(0.1,1,0.1)
+price_delta_down_range = np.arange(0.1,1,0.1) #np.arange(0.05,0.5,0.05)
 profit_epsilon_range = [0]#np.arange(0.1,1.1,0.1)
-acceptance_price_th = np.arange(0.1,1.1,0.1)
-acceptance_quantity_th = np.arange(0.1,1.1,0.1)
-cutoff_rate = np.arange(0.1,1.1,0.1)
+acceptance_price_th = np.arange(0.1,0.5,0.1)
+acceptance_quantity_th = np.arange(0.1,0.5,0.1)
+cutoff_rate = np.arange(0.1,1,0.1)
 cutoff_precentile = 0.2
 cutoff_stop_amount = 1
 
 
-for price_delta_up in price_delta_up_range:
-    for price_delta_down in price_delta_down_range:
-        for profit_epsilon in profit_epsilon_range:
-            os.system(f'python3.8 hunteragent.py 0 {price_delta_down} {price_delta_up} {profit_epsilon} 0.1 0.1 0.2 0.2 1')
+for acceptance_quantity_th_i in acceptance_quantity_th:
+    for acceptance_price_th_i in acceptance_price_th:
+        for price_delta_down in price_delta_down_range:
+            for price_delta_up in price_delta_up_range:
+                os.system(f'python3.8 hunteragent.py 2 {price_delta_down} {price_delta_up} 0.1 {acceptance_price_th_i} {acceptance_quantity_th_i} 0.2 0.2 1')
+                os.system(f'python3.8 hunteragent.py 2 {price_delta_down} {price_delta_up} 0.1 {acceptance_price_th_i} {acceptance_quantity_th_i} 0.2 0.2 1')
+                os.system(f'python3.8 hunteragent.py 2 {price_delta_down} {price_delta_up} 0.1 {acceptance_price_th_i} {acceptance_quantity_th_i} 0.2 0.2 1')
