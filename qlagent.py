@@ -144,7 +144,7 @@ class STATE_TYPE:
     OPP_COUNTER = 5
 
 class QlAgent(OneShotAgent):
-    def init(self, alpha, gamma, price_res, quantity_res): #, start_price_type=START_PRICE_TYPE.SIMPLE_AVG, price_delta_down=0.5, price_delta_up=1, profit_epsilon=0.1, acceptance_price_th=0.1, acceptance_quantity_th=0.1, cutoff_rate=0.2, cutoff_precentile=0.2, cutoff_stop_amount=1):
+    def init(self, alpha=0.1, gamma=0.9, price_res=10, quantity_res=10): #, start_price_type=START_PRICE_TYPE.SIMPLE_AVG, price_delta_down=0.5, price_delta_up=1, profit_epsilon=0.1, acceptance_price_th=0.1, acceptance_quantity_th=0.1, cutoff_rate=0.2, cutoff_precentile=0.2, cutoff_stop_amount=1):
         self.secured = 0
         # self.start_price_type = start_price_type
         # self.price_delta_down = price_delta_down
@@ -215,6 +215,10 @@ class QlAgent(OneShotAgent):
 
         DEBUG_PRINT("on_negotiation_success " + partner)
         
+        # terminal state
+        self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], contract.agreement["unit_price"]*contract.agreement["quantity"], STATE_TYPE.END)
+        self.state_per_opp[partner] = STATE_TYPE.ACCEPT
+
         
     # when we fail
     def on_negotiation_failure(self, partners, annotation, mechanism, state):
@@ -231,6 +235,10 @@ class QlAgent(OneShotAgent):
             partner = annotation["seller"]
 
         DEBUG_PRINT("on_negotiation_failure " + partner)
+
+        # terminal state
+        self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], 0, STATE_TYPE.END)
+        self.state_per_opp[partner] = STATE_TYPE.END
 
         
     def propose(self, negotiator_id: str, state) -> "Outcome":
@@ -272,10 +280,19 @@ class QlAgent(OneShotAgent):
             if self.state_per_opp[partner] == STATE_TYPE.END or self.state_per_opp[partner] == STATE_TYPE.ACCEPT:
                 # last state was terminal, thus we now start new q learning step
                 self.state_per_opp[partner] = STATE_TYPE.INIT
-                price_gap = unit_price_issue.max_value-unit_price_issue.min_value
-                quantity_gap = quantity_issue.max_value-quantity_issue.min_value
-                self._q_learning_q_init(self.q_table_per_opp[partner], price_gap, quantity_gap)
+                # price_gap = unit_price_issue.max_value-unit_price_issue.min_value
+                # quantity_gap = quantity_issue.max_value-quantity_issue.min_value
+                # self._q_learning_q_init(self.q_table_per_opp[partner], price_gap, quantity_gap)
+
+            # if we get to the "elif", this means this is during negotiation. This can only happen 
+            # after respond which set the state as MY_COUNTER
+            elif self.state_per_opp[partner] == STATE_TYPE.MY_COUNTER:
+                # after the respond 
+                # update q
+                # update q 
+                self._q_learning_update_q(STATE_TYPE.OPP_COUNTER, self.last_a_per_opp[partner], self.q_table_per_opp[partner], 0, self.state_per_opp[partner])
             else:
+                pass 
                 print("error - invalid state")
                 sys.exit(1)
 
@@ -339,6 +356,7 @@ class QlAgent(OneShotAgent):
             
         else:
             self.state_per_opp[partner] = STATE_TYPE.MY_COUNTER
+            # this means we're going to propose()
             return ResponseType.REJECT_OFFER
 
         
@@ -421,7 +439,8 @@ def run(
     """
     if competition == "oneshot":
         competitors = [
-            HunterAgent, 
+            #HunterAgent, 
+            QlAgent,
             GreedyOneShotAgent
             #RandomOneShotAgent, 
             #SyncRandomOneShotAgent,
@@ -434,7 +453,7 @@ def run(
         from scml.scml2020.agents import DecentralizingAgent, BuyCheapSellExpensiveAgent
 
         competitors = [
-            HunterAgent,
+            #HunterAgent,
             DecentralizingAgent,
             BuyCheapSellExpensiveAgent
         ]
@@ -460,17 +479,17 @@ def run(
     # display results
     print(tabulate(results.total_scores, headers="keys", tablefmt="psql"))
     print(f"Finished in {humanize_time(time.perf_counter() - start)}")
-    scores_df = results.total_scores
-    max_score = scores_df['score'].max()
-    final_score = scores_df[scores_df['agent_type']=='HunterAgent']['score'].values[0]
-    place = scores_df[scores_df['agent_type']=='HunterAgent']['score'].index[0]
-    values = [args.start_price_type,args.price_delta_down,args.price_delta_up,args.profit_epsilon,
-            args.acceptance_price_th,args.acceptance_quantity_th,args.cutoff_rate,args.cutoff_precentile,
-            args.cutoff_stop_amount,final_score-max_score]#place,final_score]
-    with open(r'parametrs_scores.csv','a') as f:
-        writer = csv.writer(f)
-        writer.writerow(values)
-    print(f"Finished in {humanize_time(time.perf_counter() - start)}")
+    # scores_df = results.total_scores
+    # max_score = scores_df['score'].max()
+    # final_score = scores_df[scores_df['agent_type']=='HunterAgent']['score'].values[0]
+    # place = scores_df[scores_df['agent_type']=='HunterAgent']['score'].index[0]
+    # values = [args.start_price_type,args.price_delta_down,args.price_delta_up,args.profit_epsilon,
+    #         args.acceptance_price_th,args.acceptance_quantity_th,args.cutoff_rate,args.cutoff_precentile,
+    #         args.cutoff_stop_amount,final_score-max_score]#place,final_score]
+    # with open(r'parametrs_scores.csv','a') as f:
+    #     writer = csv.writer(f)
+    #     writer.writerow(values)
+    # print(f"Finished in {humanize_time(time.perf_counter() - start)}")
 
 #if __name__ == "__main__":
 import sys
