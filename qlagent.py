@@ -136,6 +136,7 @@ class START_PRICE_TYPE:
     GREEDY_START = 1
 
 class STATE_TYPE:
+    NO_NEGO = -1
     INIT = 0
     #OPP_OVERRIDE = 1 
     END = 2
@@ -143,8 +144,13 @@ class STATE_TYPE:
     MY_COUNTER = 4 
     OPP_COUNTER = 5
 
+
+
+# TODO : check that on the cases that in respond() and my_needs <= 0, we always go to on_neg_fail 
+# TODO : check that on the cases that in propose() and my_needs <= 0, we always go to on_neg_fail / do something equivalent
+# TODO : take these into account in rewards http://www.yasserm.com/scml/scml2020docs/api/scml.oneshot.OneShotProfile.html?highlight=cost#scml.oneshot.OneShotProfile.cost
 class QlAgent(OneShotAgent):
-    def init(self, alpha=0.1, gamma=0.9, price_res=10, quantity_res=10): #, start_price_type=START_PRICE_TYPE.SIMPLE_AVG, price_delta_down=0.5, price_delta_up=1, profit_epsilon=0.1, acceptance_price_th=0.1, acceptance_quantity_th=0.1, cutoff_rate=0.2, cutoff_precentile=0.2, cutoff_stop_amount=1):
+    def init(self, alpha=0.3, gamma=0.7, price_res=5, quantity_res=5): #, start_price_type=START_PRICE_TYPE.SIMPLE_AVG, price_delta_down=0.5, price_delta_up=1, profit_epsilon=0.1, acceptance_price_th=0.1, acceptance_quantity_th=0.1, cutoff_rate=0.2, cutoff_precentile=0.2, cutoff_stop_amount=1):
         self.secured = 0
         # self.start_price_type = start_price_type
         # self.price_delta_down = price_delta_down
@@ -203,6 +209,9 @@ class QlAgent(OneShotAgent):
         self.secured = 0
         
         
+    
+        
+
 
     # when we succeed
     def on_negotiation_success(self, contract, mechanism):
@@ -215,33 +224,49 @@ class QlAgent(OneShotAgent):
             partner = contract.annotation["seller"]
 
         DEBUG_PRINT("on_negotiation_success " + partner)
+
+        my_needs = self._needed()
         
         # terminal state
         #print(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], contract.agreement["unit_price"]*contract.agreement["quantity"], STATE_TYPE.END)
-        self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], contract.agreement["unit_price"]*contract.agreement["quantity"], STATE_TYPE.END)
+        
+        if my_needs == 0:
+            self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], 100*contract.agreement["unit_price"]*contract.agreement["quantity"]-self.awi.profile.cost, STATE_TYPE.END)
+        elif my_needs < 0:
+            self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], 10*contract.agreement["unit_price"]*contract.agreement["quantity"]-self.awi.profile.cost-5*self._too_less_penalty(mechanism), STATE_TYPE.END)
+        else: # my_needs > 0
+            self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], contract.agreement["unit_price"]*contract.agreement["quantity"]-self.awi.profile.cost-0.2*self._too_much_penalty(mechanism), STATE_TYPE.END)
+        
+
         self.state_per_opp[partner] = STATE_TYPE.ACCEPT
 
         
     # when we fail
     def on_negotiation_failure(self, partners, annotation, mechanism, state):
-        self.failure += 1
-        my_needs = self._needed()
-        if my_needs <= 0:
-            DEBUG_PRINT("No more needs !")
-            return
-            
-            
         if self._is_selling(mechanism):
             partner = annotation["buyer"]
         else:
             partner = annotation["seller"]
 
+        if self.state_per_opp[partner] == STATE_TYPE.NO_NEGO:
+            return 
+
+        self.failure += 1    
+
         DEBUG_PRINT("on_negotiation_failure " + partner)
+
+        my_needs = self._needed()
 
         # terminal state
         #print(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], contract.agreement["unit_price"]*contract.agreement["quantity"], STATE_TYPE.END)
         #self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], 0, STATE_TYPE.END)
-        self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], -10, STATE_TYPE.END)
+        if my_needs == 0:
+            self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], 0, STATE_TYPE.END)
+        elif my_needs < 0:
+            self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], -100*self._too_less_penalty(mechanism), STATE_TYPE.END)
+        else: # my_needs > 0
+            self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], -100*self._too_much_penalty(mechanism), STATE_TYPE.END)
+        
         self.state_per_opp[partner] = STATE_TYPE.END
 
         
@@ -250,12 +275,9 @@ class QlAgent(OneShotAgent):
         #print("propose " + negotiator_id)
         my_needs = self._needed(negotiator_id)
         DEBUG_PRINT("needs : " + str(my_needs))
-        if my_needs <= 0:
-            DEBUG_PRINT("No more needs !")
-            return None
         ami = self.get_ami(negotiator_id)
         if not ami:
-            DEBUG_PRINT("No AMI !")
+            print("No AMI !")
             return None
         if self._is_selling(ami):
             partner = ami.annotation["buyer"]
@@ -281,17 +303,25 @@ class QlAgent(OneShotAgent):
             quantity_gap = quantity_issue.max_value-quantity_issue.min_value
             self._q_learning_q_init(self.q_table_per_opp[partner], price_gap, quantity_gap, unit_price_issue, quantity_issue)
 
+            if my_needs <= 0:
+                self.state_per_opp[partner] = STATE_TYPE.NO_NEGO
+                return None
+
             self.state_per_opp[partner] = STATE_TYPE.INIT
             
         else:
             # not first proposal with this negotiator
-            if self.state_per_opp[partner] == STATE_TYPE.END or self.state_per_opp[partner] == STATE_TYPE.ACCEPT:
+            if self.state_per_opp[partner] == STATE_TYPE.END or self.state_per_opp[partner] == STATE_TYPE.ACCEPT or self.state_per_opp[partner] == STATE_TYPE.NO_NEGO:
                 DEBUG_PRINT("INIT")
+                if my_needs <= 0:
+                    self.state_per_opp[partner] = STATE_TYPE.NO_NEGO
+                    return None
                 # last state was terminal, thus we now start new q learning step
                 self.state_per_opp[partner] = STATE_TYPE.INIT
                 # price_gap = unit_price_issue.max_value-unit_price_issue.min_value
                 # quantity_gap = quantity_issue.max_value-quantity_issue.min_value
                 # self._q_learning_q_init(self.q_table_per_opp[partner], price_gap, quantity_gap)
+
 
             # if we get to the "elif", this means this is during negotiation. This can only happen 
             # after respond which set the state as MY_COUNTER
@@ -319,8 +349,12 @@ class QlAgent(OneShotAgent):
 
         # print(self.q_table_per_opp)
         # print(self.state_per_opp[partner])
-        a = self._q_learning_select_action(self.q_table_per_opp[partner], self.state_per_opp[partner])
-        self.last_a_per_opp[partner] = a
+        if self.state_per_opp[partner] == STATE_TYPE.INIT:
+            a = self._q_learning_select_action(self.q_table_per_opp[partner], self.state_per_opp[partner])
+            self.last_a_per_opp[partner] = a
+        else:
+            # coming from MY_COUNTER state, I already selected my action
+            a = self.last_a_per_opp[partner]
 
         offer[OFFER_FIELD_IDX.UNIT_PRICE] = a[0]
         offer[OFFER_FIELD_IDX.QUANTITY] = a[1]
@@ -338,10 +372,7 @@ class QlAgent(OneShotAgent):
         # print("# STEP : " + str(self.awi.current_step))
         # print("# Needed to produce : " + str(self._needed()))
         my_needs = self._needed(negotiator_id)
-        if my_needs <= 0:
-            DEBUG_PRINT("No more needs !")
-            #print("response to " + str(negotiator_id) + ": END NEGO.")
-            return ResponseType.END_NEGOTIATION
+        
         ami = self.get_ami(negotiator_id)
         if not ami:
             DEBUG_PRINT("No AMI !")
@@ -356,10 +387,9 @@ class QlAgent(OneShotAgent):
         DEBUG_PRINT("------------------------------")
         unit_price_issue = ami.issues[OFFER_FIELD_IDX.UNIT_PRICE]
         
-        if partner not in self.started.keys():
-            # first proposal with this negotiator
-            self.started[partner] = True
-        
+        if self.state_per_opp[partner] == STATE_TYPE.NO_NEGO:
+            return ResponseType.REJECT_OFFER
+
         new_state = STATE_TYPE.OPP_COUNTER
 
         # update q 
@@ -367,6 +397,10 @@ class QlAgent(OneShotAgent):
 
         # choose new action 
         a = self._q_learning_select_action(self.q_table_per_opp[partner], new_state)
+
+        # in case no more needs - end
+        if my_needs <= 0:
+            a = "end"
 
         self.last_a_per_opp[partner] = a
         if isinstance(a, str):
@@ -387,9 +421,7 @@ class QlAgent(OneShotAgent):
         q[state][action] = q[state][action] + self.alpha*(reward + self.gamma*max([q[new_state][action] for action in q[new_state].keys()]) - q[state][action])
 
     def _q_learning_select_action(self, q, state):
-        # DEBUG_PRINT("_q_learning_select_action")
-        # DEBUG_PRINT(q.keys())
-        # DEBUG_PRINT(state)
+        # DEBUG_PRINT("_q_learning_select_actionq.keys(state)
         max_q = max([q[state][action] for action in q[state].keys()])
         for a in q[state].keys():
             if q[state][a] == max_q:
@@ -406,9 +438,9 @@ class QlAgent(OneShotAgent):
                     #print((p,q))
                     q_t[s][(p,q)] = 0
             
-            if s == STATE_TYPE.OPP_COUNTER:
-                q_t[s]["end"] = 0
-                q_t[s]["acc"] = 0
+            #if s == STATE_TYPE.OPP_COUNTER:
+            q_t[s]["end"] = 0
+            q_t[s]["acc"] = 0
 
     
     def _needed(self, negotiator_id=None):
@@ -418,6 +450,24 @@ class QlAgent(OneShotAgent):
 
     def _is_selling(self, ami):
         return ami.annotation["product"] == self.awi.my_output_product
+
+    def _too_much_penalty(self, ami):
+        if self._is_selling(ami):
+            return self.awi.profile.delivery_penalty_mean#, self.awi.profile.delivery_penalty_dev
+        else:
+            return self.awi.profile.storage_cost_mean#, self.awi.profile.storage_cost_dev
+             
+    def _too_less_penalty(self, ami):
+        if self._is_selling(ami):
+            return self.awi.profile.storage_cost_mean#, self.awi.profile.storage_cost_dev
+        else:
+            return self.awi.profile.delivery_penalty_mean#, self.awi.profile.delivery_penalty_dev
+             
+
+    # self.awi.profile.disposal_cost_dev
+# self.awi.profile.disposal_cost_mean
+# self.awi.profile.shortfall_penalty_dev
+# 
 
     # def _init_opposites_if_needed(self, ami):
     #     if self.opposites == -1:
@@ -444,7 +494,7 @@ from agents_pool import * #SimpleAgent, BetterAgent, LearningAgent, AdaptiveAgen
 def run(
     competition="oneshot",
     reveal_names=True,
-    n_steps=50,
+    n_steps=20,
     n_configs=2,
 ):
     """
