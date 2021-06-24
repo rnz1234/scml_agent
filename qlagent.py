@@ -123,8 +123,8 @@ method for improving : learn how to better allocate quantity per opposite agents
 """
 
 DEBUG = False#True
-ENABLE_GRAPH = False
-TO_SUBMISSION = True
+ENABLE_GRAPH = True#True
+TO_SUBMISSION = False#False
 
 if ENABLE_GRAPH:
     import matplotlib
@@ -206,6 +206,7 @@ class QlAgent(OneShotAgent):
         self.quantity_res = quantity_res
         self.epsilon = epsilon
         self.action_vec = dict()
+        self.r_after_episode = dict()
         self.q_after_episode = dict()
         self.q_steps = dict()
 
@@ -214,10 +215,13 @@ class QlAgent(OneShotAgent):
     def step(self):
         # if self.awi.current_step == 0:
         #     print("-----------------------------------------------")
-        # print("# STEP : " + str(self.awi.current_step))
+        print("# STEP : " + str(self.awi.current_step))
+        for partner in self.started.keys():
+            print(partner)
+            print(self.q_table_per_opp[partner][STATE_TYPE.MY_COUNTER])
         # print("s: " + str(self.success) + ", f: " + str(self.failure))
         # #print(self.current_agreed_price)
-        # print("profit: " + str(self.profit))
+        #print("profit: " + str(self.profit))
         # print(self.q_table_per_opp)
         
         self.secured = 0
@@ -225,18 +229,30 @@ class QlAgent(OneShotAgent):
         for partner in self.q_steps.keys():
             self.q_steps[partner] = 0
 
+        if self.awi.current_step == self.awi.n_steps-1:
+            if ENABLE_GRAPH:
+                for partner in self.r_after_episode.keys():
+                    plt.plot(self.r_after_episode[partner])
+                plt.show()
+                    #plt.plot(self.r_after_episode[partner])
+                for partner in self.q_after_episode.keys():
+                    plt.plot(self.q_after_episode[partner])
+                plt.show()
+                
+
 
     # when we succeed
     def on_negotiation_success(self, contract, mechanism):
         self.success += 1
         self.profit += contract.agreement["unit_price"]*contract.agreement["quantity"]
         self.secured += contract.agreement["quantity"]
+        
         if self._is_selling(mechanism):
             partner = contract.annotation["buyer"]
-            cur_income = contract.agreement["unit_price"]*contract.agreement["quantity"]-self.awi.current_exogenous_input_price#*self.awi.current_exogenous_input_quantity
+            cur_income = (contract.agreement["unit_price"]-float(self.awi.current_exogenous_input_price)/self.awi.current_exogenous_input_quantity-self.awi.profile.cost)*contract.agreement["quantity"]#-self.awi.current_exogenous_input_price#*self.awi.current_exogenous_input_quantity
         else:
             partner = contract.annotation["seller"]
-            cur_income = -contract.agreement["unit_price"]*contract.agreement["quantity"]+self.awi.current_exogenous_output_price#*self.awi.current_exogenous_output_quantity
+            cur_income = (float(self.awi.current_exogenous_output_price)/self.awi.current_exogenous_output_quantity-contract.agreement["unit_price"]-self.awi.profile.cost)*contract.agreement["quantity"]#*self.awi.current_exogenous_output_quantity
 
         DEBUG_PRINT("on_negotiation_success " + partner)
 
@@ -249,21 +265,26 @@ class QlAgent(OneShotAgent):
         
 
         if my_needs == 0:
-            r = cur_income-self.awi.profile.cost
-            self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.END)
+            r = cur_income
+            self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.ACCEPT)
         elif my_needs < 0:
-            r = cur_income-self.awi.profile.cost+my_needs*self._too_much_penalty(mechanism)
-            self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.END)
+            r = cur_income#+my_needs*self._too_much_penalty(mechanism)
+            self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.ACCEPT)
         else: # my_needs > 0
-            r = cur_income-self.awi.profile.cost-my_needs*self._too_less_penalty(mechanism)
-            self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.END)
+            r = cur_income#-my_needs*self._too_less_penalty(mechanism)
+            self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.ACCEPT)
         
         #print("reward: ", r)
         
+        if partner not in self.r_after_episode:
+            self.r_after_episode[partner] = []
+
         if partner not in self.q_after_episode:
             self.q_after_episode[partner] = []
         
-        self.q_after_episode[partner].append(r/self.q_steps[partner])
+        self.r_after_episode[partner].append(r/self.q_steps[partner])
+        #print(self.q_table_per_opp[partner][STATE_TYPE.ACCEPT])
+        self.q_after_episode[partner].append(self.q_table_per_opp[partner][STATE_TYPE.MY_COUNTER]["acc"])
 
         self.state_per_opp[partner] = STATE_TYPE.ACCEPT
 
@@ -274,6 +295,9 @@ class QlAgent(OneShotAgent):
             partner = annotation["buyer"]
         else:
             partner = annotation["seller"]
+
+        if partner not in self.state_per_opp:
+            return None
 
         if self.state_per_opp[partner] == STATE_TYPE.NO_NEGO:
             return 
@@ -288,11 +312,13 @@ class QlAgent(OneShotAgent):
         # terminal state
         #print(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], contract.agreement["unit_price"]*contract.agreement["quantity"], STATE_TYPE.END)
         #self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], 0, STATE_TYPE.END)
+        print("----U---")
+        print(self.state_per_opp[partner], self.last_a_per_opp[partner])
         if my_needs == 0:
             r = 0
             self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.END)
         elif my_needs < 0:
-            r = my_needs*self._too_much_penalty(mechanism)
+            r = 0#my_needs*self._too_much_penalty(mechanism)
             self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.END)
         else: # my_needs > 0
             r = -my_needs*self._too_less_penalty(mechanism)
@@ -301,14 +327,15 @@ class QlAgent(OneShotAgent):
         self.state_per_opp[partner] = STATE_TYPE.END
         #print("reward: ", r)
 
-        if partner not in self.q_after_episode:
-            self.q_after_episode[partner] = []
+        if partner not in self.r_after_episode:
+            self.r_after_episode[partner] = []
         
-        self.q_after_episode[partner].append(r/self.q_steps[partner])
+        self.r_after_episode[partner].append(r/self.q_steps[partner])
 
 
         
     def propose(self, negotiator_id: str, state) -> "Outcome":
+        #print("# STEP : " + str(self.awi.current_step))
         DEBUG_PRINT("propose " + negotiator_id)
         #print("propose " + negotiator_id)
         my_needs = self._needed(negotiator_id)
@@ -408,6 +435,8 @@ class QlAgent(OneShotAgent):
         # print("# STEP : " + str(self.awi.current_step))
         # print("# Needed to produce : " + str(self._needed()))
         # print("propose to " + str(negotiator_id) + ":" + str(self.best_offer(negotiator_id)))
+        #print(partner)
+        #print(self.q_table_per_opp[partner])
         return tuple(offer)
 
     def respond(self, negotiator_id, state, offer):
@@ -431,6 +460,9 @@ class QlAgent(OneShotAgent):
         DEBUG_PRINT("------------------------------")
         unit_price_issue = ami.issues[OFFER_FIELD_IDX.UNIT_PRICE]
         
+        if partner not in self.state_per_opp:
+            return None
+
         if self.state_per_opp[partner] == STATE_TYPE.NO_NEGO:
             return ResponseType.REJECT_OFFER
 
@@ -463,14 +495,19 @@ class QlAgent(OneShotAgent):
         
     
     def _q_learning_update_q(self, state, action, q, reward, new_state):
+        print(state)
+        print(action)
+        print(new_state)
+        print("--------")
         q[state][action] = q[state][action] + self.alpha*(reward + self.gamma*max([q[new_state][action] for action in q[new_state].keys()]) - q[state][action])
-
+        
     def _q_learning_select_action(self, q, state, action_vec):
         # DEBUG_PRINT("_q_learning_select_actionq.keys(state)
         p = np.random.random()
         if p < self.epsilon:
             return np.random.choice(action_vec)
         else:
+            #print([q[state][action] for action in q[state].keys()])
             max_q = max([q[state][action] for action in q[state].keys()])
             for a in q[state].keys():
                 if q[state][a] == max_q:
@@ -485,7 +522,7 @@ class QlAgent(OneShotAgent):
             for p in np.linspace(unit_price_issue.min_value, unit_price_issue.max_value, self.price_res):
                 for q in np.linspace(quantity_issue.min_value, quantity_issue.max_value, self.quantity_res):
                     #print((p,q))
-                    q_t[s][(p,q)] = 0
+                    q_t[s][(p,np.ceil(q))] = 0
             
             #if s == STATE_TYPE.OPP_COUNTER:
             q_t[s]["end"] = 0
@@ -493,7 +530,7 @@ class QlAgent(OneShotAgent):
 
         for p in np.linspace(unit_price_issue.min_value, unit_price_issue.max_value, self.price_res):
             for q in np.linspace(quantity_issue.min_value, quantity_issue.max_value, self.quantity_res):
-                action_vec.append((p,q))
+                action_vec.append((p,np.ceil(q)))
 
         action_vec.append("end")
         action_vec.append("acc")
@@ -506,25 +543,25 @@ class QlAgent(OneShotAgent):
     def _is_selling(self, ami):
         return ami.annotation["product"] == self.awi.my_output_product
 
-    # storage : buying to much, delivery : selling too much
+    # storage : buying to much == disposal, delivery : selling too much == shortfall
     def _too_much_penalty(self, ami):
         if self._is_selling(ami):
-            return self.awi.profile.delivery_penalty_mean#, self.awi.profile.delivery_penalty_dev
+            return self.awi.profile.shortfall_penalty_mean#, self.awi.profile.shortfall_penalty_dev
         else:
-            return self.awi.profile.storage_cost_mean#, self.awi.profile.storage_cost_dev
+            return self.awi.profile.disposal_cost_mean#, self.awi.profile.disposal_cost_dev
              
     def _too_less_penalty(self, ami):
         if self._is_selling(ami):
-            return self.awi.profile.storage_cost_mean#, self.awi.profile.storage_cost_dev
+            return self.awi.profile.disposal_cost_mean#, self.awi.profile.disposal_cost_dev
         else:
-            return self.awi.profile.delivery_penalty_mean#, self.awi.profile.delivery_penalty_dev
+            return self.awi.profile.shortfall_penalty_mean#, self.awi.profile.shortfall_penalty_dev
 
-    def __del__(self):
-        if ENABLE_GRAPH:
-            for partner in self.q_after_episode.keys():
-                plt.plot(self.q_after_episode[partner])
+    # def __del__(self):
+    #     if ENABLE_GRAPH:
+    #         for partner in self.q_after_episode.keys():
+    #             plt.plot(self.q_after_episode[partner])
             
-            plt.show()
+    #         plt.show()
                 
     # def __del__(self):
     #     avg_q = dict()
@@ -538,7 +575,7 @@ if not TO_SUBMISSION:
     def run(
         competition="oneshot",
         reveal_names=True,
-        n_steps=10,
+        n_steps=500,
         n_configs=1,
     ):
         """
@@ -566,7 +603,8 @@ if not TO_SUBMISSION:
             competitors = [
                 #HunterAgent, 
                 QlAgent,
-                GreedyOneShotAgent
+                QlAgent,
+                #GreedyOneShotAgent
                 #RandomOneShotAgent, 
                 #SyncRandomOneShotAgent,
                 #SimpleAgent, 
@@ -595,7 +633,11 @@ if not TO_SUBMISSION:
             verbose=True,
             n_steps=n_steps,
             n_configs=n_configs,
-            parallelism="serial"
+            parallelism="serial",
+            #max_worlds_per_config=1,
+            #n_runs_per_world=1,
+            #min_factories_per_level=1
+            disable_agent_printing=False
         )
         # just make names shorter
         results.total_scores.agent_type = results.total_scores.agent_type.str.split(
