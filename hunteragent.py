@@ -91,17 +91,17 @@ import numpy as np
 import argparse
 import csv
 
-parser = argparse.ArgumentParser()
-parser.add_argument('start_price_type',type=float)
-parser.add_argument('price_delta_down',type=float)
-parser.add_argument('price_delta_up',type=float)
-parser.add_argument('profit_epsilon',type=float)
-parser.add_argument('acceptance_price_th',type=float)
-parser.add_argument('acceptance_quantity_th',type=float)
-parser.add_argument('cutoff_rate',type=float)
-parser.add_argument('cutoff_precentile',type=float)
-parser.add_argument('cutoff_stop_amount',type=float)
-args = parser.parse_args()
+# parser = argparse.ArgumentParser()
+# parser.add_argument('start_price_type',type=float)
+# parser.add_argument('price_delta_down',type=float)
+# parser.add_argument('price_delta_up',type=float)
+# parser.add_argument('profit_epsilon',type=float)
+# parser.add_argument('acceptance_price_th',type=float)
+# parser.add_argument('acceptance_quantity_th',type=float)
+# parser.add_argument('cutoff_rate',type=float)
+# parser.add_argument('cutoff_precentile',type=float)
+# parser.add_argument('cutoff_stop_amount',type=float)
+# args = parser.parse_args()
 
 """
 Notes:
@@ -153,41 +153,41 @@ class HunterAgent(OneShotAgent):
     # every exporation_epoch steps, the price delta for exploration is mult by greediness_rate   
     # every 1/cut_off rate steps, cutoff_ratio of the opposites which yields the agent the worst acculated income, are cut from propose negotiation 
     # idea : overbooking rate (put more quantity than available)
-    def init(self): #, start_price_type=START_PRICE_TYPE.SIMPLE_AVG, price_delta_down=0.5, price_delta_up=1, profit_epsilon=0.1, acceptance_price_th=0.1, acceptance_quantity_th=0.1, cutoff_rate=0.2, cutoff_precentile=0.2, cutoff_stop_amount=1):
-        # self.secured = 0
-        # self.start_price_type = start_price_type
-        # self.price_delta_down = price_delta_down
-        # self.price_delta_up = price_delta_up
-        # self.profit_epsilon = profit_epsilon
-        # self.acceptance_price_th = acceptance_price_th
-        # self.acceptance_quantity_th = acceptance_quantity_th
-        # self.current_agreed_price = dict()
-        # self.next_proposed_price = dict()
-        # self.started = dict()
-        # self.finished = []
-        # self.opposites = -1
-        # self.cutoff_rate = cutoff_rate
-        # self.cutoff_precentile = cutoff_precentile
-        # self.cutoff_stop_amount = cutoff_stop_amount
-        # self.opposite_price_gap = dict()
-        
-
+    def init(self, start_price_type=START_PRICE_TYPE.SIMPLE_AVG, price_delta_down=0.5, price_delta_up=1, profit_epsilon=0.1, acceptance_price_th=0.1, acceptance_quantity_th=0.1, cutoff_rate=0.2, cutoff_precentile=0.2, cutoff_stop_amount=1):
         self.secured = 0
-        self.start_price_type = args.start_price_type
-        self.price_delta_down = args.price_delta_down
-        self.price_delta_up = args.price_delta_up
-        self.profit_epsilon = args.profit_epsilon
-        self.acceptance_price_th = args.acceptance_price_th
-        self.acceptance_quantity_th = args.acceptance_quantity_th
+        self.start_price_type = start_price_type
+        self.price_delta_down = price_delta_down
+        self.price_delta_up = price_delta_up
+        self.profit_epsilon = profit_epsilon
+        self.acceptance_price_th = acceptance_price_th
+        self.acceptance_quantity_th = acceptance_quantity_th
         self.current_agreed_price = dict()
         self.next_proposed_price = dict()
         self.started = dict()
         self.finished = []
         self.opposites = -1
-        self.cutoff_rate = args.cutoff_rate
-        self.cutoff_precentile = args.cutoff_precentile
-        self.cutoff_stop_amount = args.cutoff_stop_amount
+        self.cutoff_rate = cutoff_rate
+        self.cutoff_precentile = cutoff_precentile
+        self.cutoff_stop_amount = cutoff_stop_amount
         self.opposite_price_gap = dict()
+        
+
+        # self.secured = 0
+        # self.start_price_type = args.start_price_type
+        # self.price_delta_down = args.price_delta_down
+        # self.price_delta_up = args.price_delta_up
+        # self.profit_epsilon = args.profit_epsilon
+        # self.acceptance_price_th = args.acceptance_price_th
+        # self.acceptance_quantity_th = args.acceptance_quantity_th
+        # self.current_agreed_price = dict()
+        # self.next_proposed_price = dict()
+        # self.started = dict()
+        # self.finished = []
+        # self.opposites = -1
+        # self.cutoff_rate = args.cutoff_rate
+        # self.cutoff_precentile = args.cutoff_precentile
+        # self.cutoff_stop_amount = args.cutoff_stop_amount
+        # self.opposite_price_gap = dict()
         self.success = 0 
         self.failure = 0
         self.profit = 0
@@ -467,88 +467,88 @@ class HunterAgent(OneShotAgent):
 from agents_pool import * #SimpleAgent, BetterAgent, LearningAgent, AdaptiveAgent
 
 
-def run(
-    competition="oneshot",
-    reveal_names=True,
-    n_steps=50,
-    n_configs=2,
-):
-    """
-    **Not needed for submission.** You can use this function to test your agent.
+# def run(
+#     competition="oneshot",
+#     reveal_names=True,
+#     n_steps=50,
+#     n_configs=2,
+# ):
+#     """
+#     **Not needed for submission.** You can use this function to test your agent.
 
-    Args:
-        competition: The competition type to run (possibilities are oneshot, std,
-                     collusion).
-        n_steps:     The number of simulation steps.
-        n_configs:   Number of different world configurations to try.
-                     Different world configurations will correspond to
-                     different number of factories, profiles
-                     , production graphs etc
+#     Args:
+#         competition: The competition type to run (possibilities are oneshot, std,
+#                      collusion).
+#         n_steps:     The number of simulation steps.
+#         n_configs:   Number of different world configurations to try.
+#                      Different world configurations will correspond to
+#                      different number of factories, profiles
+#                      , production graphs etc
 
-    Returns:
-        None
+#     Returns:
+#         None
 
-    Remarks:
+#     Remarks:
 
-        - This function will take several minutes to run.
-        - To speed it up, use a smaller `n_step` value
+#         - This function will take several minutes to run.
+#         - To speed it up, use a smaller `n_step` value
 
-    """
-    if competition == "oneshot":
-        competitors = [
-            HunterAgent, 
-            GreedyOneShotAgent,
-            #RandomOneShotAgent, 
-            #SyncRandomOneShotAgent,
-            # SimpleAgent, 
-            # BetterAgent,
-            # AdaptiveAgent,
-            #LearningAgent
-        ]
-    else:
-        from scml.scml2020.agents import DecentralizingAgent, BuyCheapSellExpensiveAgent
+#     """
+#     if competition == "oneshot":
+#         competitors = [
+#             HunterAgent, 
+#             GreedyOneShotAgent,
+#             #RandomOneShotAgent, 
+#             #SyncRandomOneShotAgent,
+#             # SimpleAgent, 
+#             # BetterAgent,
+#             # AdaptiveAgent,
+#             #LearningAgent
+#         ]
+#     else:
+#         from scml.scml2020.agents import DecentralizingAgent, BuyCheapSellExpensiveAgent
 
-        competitors = [
-            HunterAgent,
-            DecentralizingAgent,
-            BuyCheapSellExpensiveAgent
-        ]
+#         competitors = [
+#             HunterAgent,
+#             DecentralizingAgent,
+#             BuyCheapSellExpensiveAgent
+#         ]
 
-    start = time.perf_counter()
-    if competition == "std":
-        runner = anac2021_std
-    elif competition == "collusion":
-        runner = anac2021_collusion
-    else:
-        runner = anac2021_oneshot
-    results = runner(
-        competitors=competitors,
-        verbose=True,
-        n_steps=n_steps,
-        n_configs=n_configs,
-        #parallelism="serial"
-    )
-    # just make names shorter
-    results.total_scores.agent_type = results.total_scores.agent_type.str.split(
-        "."
-    ).str[-1]
-    # display results
-    print(tabulate(results.total_scores, headers="keys", tablefmt="psql"))
-    print(f"Finished in {humanize_time(time.perf_counter() - start)}")
-    scores_df = results.total_scores
-    max_score = scores_df[scores_df['agent_type']!='HunterAgent']['score'].max()
-    final_score = scores_df[scores_df['agent_type']=='HunterAgent']['score'].values[0]
-    place = scores_df[scores_df['agent_type']=='HunterAgent']['score'].index[0]
-    values = [args.start_price_type,args.price_delta_down,args.price_delta_up,args.profit_epsilon,
-            args.acceptance_price_th,args.acceptance_quantity_th,args.cutoff_rate,args.cutoff_precentile,
-            args.cutoff_stop_amount,final_score-max_score]#place,final_score]
-    with open(r'parametrs_scores.csv','a') as f:
-        writer = csv.writer(f)
-        writer.writerow(values)
-    print(f"Finished in {humanize_time(time.perf_counter() - start)}")
+#     start = time.perf_counter()
+#     if competition == "std":
+#         runner = anac2021_std
+#     elif competition == "collusion":
+#         runner = anac2021_collusion
+#     else:
+#         runner = anac2021_oneshot
+#     results = runner(
+#         competitors=competitors,
+#         verbose=True,
+#         n_steps=n_steps,
+#         n_configs=n_configs,
+#         #parallelism="serial"
+#     )
+#     # just make names shorter
+#     results.total_scores.agent_type = results.total_scores.agent_type.str.split(
+#         "."
+#     ).str[-1]
+#     # display results
+#     print(tabulate(results.total_scores, headers="keys", tablefmt="psql"))
+#     print(f"Finished in {humanize_time(time.perf_counter() - start)}")
+#     scores_df = results.total_scores
+#     max_score = scores_df[scores_df['agent_type']!='HunterAgent']['score'].max()
+#     final_score = scores_df[scores_df['agent_type']=='HunterAgent']['score'].values[0]
+#     place = scores_df[scores_df['agent_type']=='HunterAgent']['score'].index[0]
+#     values = [args.start_price_type,args.price_delta_down,args.price_delta_up,args.profit_epsilon,
+#             args.acceptance_price_th,args.acceptance_quantity_th,args.cutoff_rate,args.cutoff_precentile,
+#             args.cutoff_stop_amount,final_score-max_score]#place,final_score]
+#     with open(r'parametrs_scores.csv','a') as f:
+#         writer = csv.writer(f)
+#         writer.writerow(values)
+#     print(f"Finished in {humanize_time(time.perf_counter() - start)}")
 
-#if __name__ == "__main__":
-import sys
+# #if __name__ == "__main__":
+# import sys
 
-run("oneshot")
-#run(sys.argv[1] if len(sys.argv) > 1 else "oneshot")
+# run("oneshot")
+# #run(sys.argv[1] if len(sys.argv) > 1 else "oneshot")
