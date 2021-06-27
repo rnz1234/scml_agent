@@ -84,3 +84,27 @@ Fill this section with your agent information
     1. First Name <first.email@institute.xyz>
     2. Second Name <first.email@institute.xyz>
     3. ...    
+
+
+
+
+Ideas:
+-----------------
+
+1. Trying to use Q learning for the negotiation game
+2. Rewards:
+
+if L0 bought in pricA*(p1-p0-cost) - B*f(disposal, shortfall)e p0, sold to L1 in price p1, L1 sold in p2
+
+L0 reward = A*(p1-p0-cost) - B*f(disposal, shortfall)
+L1 reward = C*(p2-p1-cost) - D*f(disposal, shortfall)
+
+A, C = contract quantity
+
+B, D ~ the amount this contract contributes to excess
+But this is hard to say, since:
+- in case of positive excess (we didn't sell/buy everything) - everything might later be sold/bought so there might eventually not be any excess
+- in case of negative excess (we bought/sold too much) - there's a contribution for all successful contracts, so it should be normalized.
+on the other hand - we make sure it won't happen (end nego. in case my_needs =0)
+
+So in general, for now B=D=0

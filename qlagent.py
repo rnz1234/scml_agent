@@ -124,9 +124,9 @@ method for improving : learn how to better allocate quantity per opposite agents
 
 """
 
-DEBUG = False#True
-ENABLE_GRAPH = True
-TO_SUBMISSION = True
+DEBUG = False
+ENABLE_GRAPH = False
+TO_SUBMISSION = False
 
 if ENABLE_GRAPH:
     import matplotlib
@@ -157,12 +157,12 @@ class STATE_TYPE:
     OPP_COUNTER = 5
 
 
-
+# epsilon=0.00005
 # TODO : check that on the cases that in respond() and my_needs <= 0, we always go to on_neg_fail - DONE
 # TODO : check that on the cases that in propose() and my_needs <= 0, we always go to on_neg_fail / do something equivalent - DONE
 # TODO : take these into account in rewards http://www.yasserm.com/scml/scml2020docs/api/scml.oneshot.OneShotProfile.html?highlight=cost#scml.oneshot.OneShotProfile.cost - DONE
 class QlAgent(OneShotAgent):
-    def init(self, alpha=0.1, gamma=0.9, price_res=10, quantity_res=10, epsilon=0.00005, smart_init=True, complex_state=True): #, start_price_type=START_PRICE_TYPE.SIMPLE_AVG, price_delta_down=0.5, price_delta_up=1, profit_epsilon=0.1, acceptance_price_th=0.1, acceptance_quantity_th=0.1, cutoff_rate=0.2, cutoff_precentile=0.2, cutoff_stop_amount=1):
+    def init(self, alpha=0.1, gamma=0.9, price_res=10, quantity_res=10, epsilon_start=0.00095, epsilon_end=0.00001, epsilon_decay=200, smart_init=True, complex_state=True): #, start_price_type=START_PRICE_TYPE.SIMPLE_AVG, price_delta_down=0.5, price_delta_up=1, profit_epsilon=0.1, acceptance_price_th=0.1, acceptance_quantity_th=0.1, cutoff_rate=0.2, cutoff_precentile=0.2, cutoff_stop_amount=1):
         self.secured = 0 #0.00005
         # self.start_price_type = start_price_type
         # self.price_delta_down = price_delta_down
@@ -207,7 +207,9 @@ class QlAgent(OneShotAgent):
         self.gamma = gamma
         self.price_res = price_res
         self.quantity_res = quantity_res
-        self.epsilon = epsilon
+        self.epsilon_start = epsilon_start
+        self.epsilon_end = epsilon_end
+        self.epsilon_decay = epsilon_decay
         self.action_vec = dict()
         self.r_after_episode = dict()
         self.q_after_episode = dict()
@@ -216,16 +218,19 @@ class QlAgent(OneShotAgent):
         self.smart_init = smart_init
         self.complex_state = complex_state
         self.episodes = 0
+        self.num_of_negotiations_per_step = dict()
 
         
 
     def step(self):
         # if self.awi.current_step == 0:
         #     print("-----------------------------------------------")
-        print("# STEP : " + str(self.awi.current_step))
-        print("# Episodes  : " + str(self.episodes))
+        DEBUG_PRINT("# STEP : " + str(self.awi.current_step))
+        DEBUG_PRINT("# Episodes  : " + str(self.episodes))
+
+        
         for partner in self.started.keys():
-            print(partner)
+            DEBUG_PRINT(partner)
         #    print(self.q_table_per_opp[partner])
         # print("s: " + str(self.success) + ", f: " + str(self.failure))
         # #print(self.current_agreed_price)
@@ -281,34 +286,41 @@ class QlAgent(OneShotAgent):
             self.profit_per_opp[partner].append(cur_profit)
 
         #DEBUG_PRINT("on_negotiation_success " + partner)
-        print("--------------------------------")
-        print("SUCCESS <=>" + partner)
+        DEBUG_PRINT("--------------------------------")
+        DEBUG_PRINT("SUCCESS <=>" + partner)
 
         my_needs = self._needed()
         self.q_steps[partner] += 1
+        if partner not in self.num_of_negotiations_per_step:
+            self.num_of_negotiations_per_step[partner] = 0
+        self.num_of_negotiations_per_step[partner] += 1
         
         # terminal state
         #print(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], contract.agreement["unit_price"]*contract.agreement["quantity"], STATE_TYPE.END)
         
         # print("done good")
         # print(self.state_per_opp[partner])
+        #print("update 3")
         if my_needs == 0:
+            DEBUG_PRINT("success : no needs")
             # if self.last_a_per_opp[partner] == "acc":
             #     r = 0 # already taken in account
             # else:
-            r = cur_profit
+            r = 100000*cur_profit
             self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.ACCEPT)
         elif my_needs < 0:
+            DEBUG_PRINT("success : - needs")
             # if self.last_a_per_opp[partner] == "acc":
             #     r = 0 # already taken in account
             # else:
-            r = cur_profit+0.1*my_needs*self._too_much_penalty(mechanism)/self.q_steps[partner]#*self.awi.current_step
+            r = cur_profit+1*my_needs*self._too_much_penalty(mechanism)/self.num_of_negotiations_per_step[partner]#*self.awi.current_step
             self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.ACCEPT)
         else: # my_needs > 0
+            DEBUG_PRINT("success : + needs")
             # if self.last_a_per_opp[partner] == "acc":
             #     r = 0 # already taken in account
             # else:
-            r = cur_profit-0.1*my_needs*self._too_less_penalty(mechanism)/self.q_steps[partner]#*self.awi.current_step
+            r = cur_profit-10*my_needs*self._too_less_penalty(mechanism)/self.num_of_negotiations_per_step[partner]#*self.awi.current_step
             self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.ACCEPT)
         
         #print("reward: ", r)
@@ -340,17 +352,26 @@ class QlAgent(OneShotAgent):
         if self.state_per_opp[partner] == STATE_TYPE.NO_NEGO:
             return 
 
+        if self.last_a_per_opp is None:
+            return
+        
+        if partner not in self.last_a_per_opp:
+            return 
+
         self.episodes += 1
         self.failure += 1   
 
         
 
         #DEBUG_PRINT("on_negotiation_failure " + partner)
-        print("--------------------------------")
-        print("FAILURE <=>" + partner)
+        DEBUG_PRINT("--------------------------------")
+        DEBUG_PRINT("FAILURE <=>" + partner)
 
         my_needs = self._needed()
         self.q_steps[partner] += 1
+        if partner not in self.num_of_negotiations_per_step:
+            self.num_of_negotiations_per_step[partner] = 0
+        self.num_of_negotiations_per_step[partner] += 1
 
         # terminal state
         #print(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], contract.agreement["unit_price"]*contract.agreement["quantity"], STATE_TYPE.END)
@@ -359,14 +380,15 @@ class QlAgent(OneShotAgent):
         # print(self.state_per_opp[partner], self.last_a_per_opp[partner])
         # print("done bad")
         # print(self.state_per_opp[partner])
+        #print("update 2")
         if my_needs == 0:
             r = 0
             self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.END)
         elif my_needs < 0:
-            r = 0.1*my_needs*self._too_much_penalty(mechanism)/self.q_steps[partner]#*self.awi.current_step
+            r = 0.1*my_needs*self._too_much_penalty(mechanism)/self.num_of_negotiations_per_step[partner]#*self.awi.current_step
             self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.END)
         else: # my_needs > 0
-            r = -0.1*my_needs*self._too_less_penalty(mechanism)/self.q_steps[partner]#*self.awi.current_step
+            r = -0.1*my_needs*self._too_less_penalty(mechanism)/self.num_of_negotiations_per_step[partner]#*self.awi.current_step
             self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], r, STATE_TYPE.END)
         
         self.state_per_opp[partner] = STATE_TYPE.END
@@ -388,10 +410,10 @@ class QlAgent(OneShotAgent):
         
     def propose(self, negotiator_id: str, state) -> "Outcome":
         #print("# STEP : " + str(self.awi.current_step))
-        DEBUG_PRINT("propose " + negotiator_id)
+        #DEBUG_PRINT("propose " + negotiator_id)
         #print("propose " + negotiator_id)
         my_needs = self._needed(negotiator_id)
-        DEBUG_PRINT("needs : " + str(my_needs))
+        #DEBUG_PRINT("needs : " + str(my_needs))
         ami = self.get_ami(negotiator_id)
         if not ami:
             print("No AMI !")
@@ -405,8 +427,8 @@ class QlAgent(OneShotAgent):
             is_seller = False
         # if partner in self.finished:
         #     return None
-        DEBUG_PRINT("propose " + partner)
-        DEBUG_PRINT("------------------------------")
+        #DEBUG_PRINT("propose " + partner)
+        #DEBUG_PRINT("------------------------------")
         #self._init_opposites_if_needed(ami)
         unit_price_issue = ami.issues[OFFER_FIELD_IDX.UNIT_PRICE]
         quantity_issue = ami.issues[OFFER_FIELD_IDX.QUANTITY]
@@ -415,7 +437,7 @@ class QlAgent(OneShotAgent):
         if partner not in self.started.keys():
             # first proposal with this negotiator. this means first proposal in the simulation 
             # against it.
-            DEBUG_PRINT("INIT")
+            #DEBUG_PRINT("INIT")
             self.started[partner] = True
             self.q_table_per_opp[partner] = dict()
             #print(self.q_table_per_opp)
@@ -435,7 +457,7 @@ class QlAgent(OneShotAgent):
         else:
             # not first proposal with this negotiator
             if self.state_per_opp[partner] == STATE_TYPE.END or self.state_per_opp[partner] == STATE_TYPE.ACCEPT or self.state_per_opp[partner] == STATE_TYPE.NO_NEGO:
-                DEBUG_PRINT("INIT")
+                #DEBUG_PRINT("INIT")
                 if my_needs <= 0:
                     self.state_per_opp[partner] = STATE_TYPE.NO_NEGO
                     return None
@@ -449,7 +471,7 @@ class QlAgent(OneShotAgent):
 
             # if we get to the "elif", this means this is during negotiation. 
             elif self.state_per_opp[partner] == STATE_TYPE.OPP_COUNTER or isinstance(self.state_per_opp[partner], tuple):
-                DEBUG_PRINT("OPP_COUNTER")
+                #DEBUG_PRINT("OPP_COUNTER")
                 #print("propose: " + str(self.state_per_opp[partner]))
                 # after the respond 
                 # update q
@@ -461,7 +483,7 @@ class QlAgent(OneShotAgent):
                 # print(self.state_per_opp[partner])
                 # print("error - invalid state")
                 # sys.exit(1)
-                DEBUG_PRINT("INIT2")
+                #DEBUG_PRINT("INIT2")
                 self.started[partner] = True
                 #self.q_table_per_opp[partner] = dict()
                 #print(self.q_table_per_opp)
@@ -485,11 +507,11 @@ class QlAgent(OneShotAgent):
                 print("should not happen")
                 return None
 
-        # print("-------------------------")
-        # print("PROPOSE -->" + partner)
-        # print(ami.annotation["buyer"], ami.annotation["seller"])
-        # print("executed action : " + str(a))
-        # print("state : " + str(self.state_per_opp[partner]))
+        # DEBUG_PRINT("-------------------------")
+        # DEBUG_PRINT("PROPOSE -->" + partner)
+        # DEBUG_PRINT(ami.annotation["buyer"], ami.annotation["seller"])
+        # DEBUG_PRINT("executed action : " + str(a))
+        # DEBUG_PRINT("state : " + str(self.state_per_opp[partner]))
         offer[OFFER_FIELD_IDX.UNIT_PRICE] = a[0]
         offer[OFFER_FIELD_IDX.QUANTITY] = a[1]
         offer[OFFER_FIELD_IDX.TIME] = self.awi.current_step
@@ -503,7 +525,7 @@ class QlAgent(OneShotAgent):
         return tuple(offer)
 
     def respond(self, negotiator_id, state, offer):
-        DEBUG_PRINT("respond " + negotiator_id)
+        #DEBUG_PRINT("respond " + negotiator_id)
         # print("-----------------------------------------------")
         # print("# STEP : " + str(self.awi.current_step))
         # print("# Needed to produce : " + str(self._needed()))
@@ -529,8 +551,8 @@ class QlAgent(OneShotAgent):
         
         # if partner in self.finished:
         #     return None
-        DEBUG_PRINT("respond " + partner)
-        DEBUG_PRINT("------------------------------")
+        #DEBUG_PRINT("respond " + partner)
+        #DEBUG_PRINT("------------------------------")
         #unit_price_issue = ami.issues[OFFER_FIELD_IDX.UNIT_PRICE]
         #quantity_issue = ami.issues[OFFER_FIELD_IDX.QUANTITY]
 
@@ -556,12 +578,12 @@ class QlAgent(OneShotAgent):
         if self.state_per_opp[partner] == STATE_TYPE.NO_NEGO:
             return ResponseType.REJECT_OFFER
 
-        # print("-------------------------")
-        # print("RESPOND <--" + partner)
-        # print("my last offer : " + str(self.last_a_per_opp[partner]))
-        # print("new offer : " + str([offer[OFFER_FIELD_IDX.UNIT_PRICE], offer[OFFER_FIELD_IDX.QUANTITY]]))
-        # print("last state : " + str(self.state_per_opp[partner]))
-
+        # DEBUG_PRINT("-------------------------")
+        # DEBUG_PRINT("RESPOND <--" + partner)
+        # DEBUG_PRINT("my last offer : " + str(self.last_a_per_opp[partner]))
+        # DEBUG_PRINT("new offer : " + str([offer[OFFER_FIELD_IDX.UNIT_PRICE], offer[OFFER_FIELD_IDX.QUANTITY]]))
+        # DEBUG_PRINT("last state : " + str(self.state_per_opp[partner]))
+        
 
         if not self.complex_state:
             new_state = STATE_TYPE.OPP_COUNTER
@@ -570,24 +592,36 @@ class QlAgent(OneShotAgent):
             quantity_issue = ami.issues[OFFER_FIELD_IDX.QUANTITY]
             price_gap = unit_price_issue.max_value-unit_price_issue.min_value
             quantity_gap = quantity_issue.max_value-quantity_issue.min_value
-            new_state = self._find_state_mapping(self.last_a_per_opp[partner][0], 
-                                                 self.last_a_per_opp[partner][1],
-                                                 offer[OFFER_FIELD_IDX.UNIT_PRICE],
-                                                 offer[OFFER_FIELD_IDX.QUANTITY],
-                                                price_gap, quantity_gap, unit_price_issue, quantity_issue)
+            if self.last_a_per_opp is None or \
+                self.last_a_per_opp[partner] is None:
+                new_state = self._find_state_mapping(0, 
+                                                    0,
+                                                    offer[OFFER_FIELD_IDX.UNIT_PRICE],
+                                                    offer[OFFER_FIELD_IDX.QUANTITY],
+                                                    price_gap, quantity_gap, unit_price_issue, quantity_issue)[2:]
+                self.state_per_opp[partner] = STATE_TYPE.INIT
+            else:
+                new_state = self._find_state_mapping(self.last_a_per_opp[partner][0], 
+                                                    self.last_a_per_opp[partner][1],
+                                                    offer[OFFER_FIELD_IDX.UNIT_PRICE],
+                                                    offer[OFFER_FIELD_IDX.QUANTITY],
+                                                    price_gap, quantity_gap, unit_price_issue, quantity_issue)
+        
+                # update q 
+                #print("update 1")
+                self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], 0, new_state)
+
         self.q_steps[partner] += 1
 
-        # update q 
-        self._q_learning_update_q(self.state_per_opp[partner], self.last_a_per_opp[partner], self.q_table_per_opp[partner], 0, new_state)
-
+        
         # advance state
         self.state_per_opp[partner] = new_state
 
         # choose new action 
         a = self._q_learning_select_action(self.q_table_per_opp[partner], new_state, self.action_vec[partner])
 
-        # print("new state : " + str(self.state_per_opp[partner]))
-        # print("next action : " + str(a))
+        # DEBUG_PRINT("new state : " + str(self.state_per_opp[partner]))
+        # DEBUG_PRINT("next action : " + str(a))
         # in case no more needs - end
         if my_needs <= 0:
             a = "end"
@@ -612,15 +646,17 @@ class QlAgent(OneShotAgent):
         # print(action)
         # print(new_state)
         # print(reward)
-        # print()
-        #print("--------")
+        # print("--------")
         q[state][action] = q[state][action] + self.alpha*(reward + self.gamma*max([q[new_state][action] for action in q[new_state].keys()]) - q[state][action])
         
     def _q_learning_select_action(self, q, state, action_vec):
         # DEBUG_PRINT("_q_learning_select_actionq.keys(state)
+        eps_threshold = self.epsilon_end + (self.epsilon_start - self.epsilon_end) * \
+                                                          math.exp(-1. * (self.awi.current_step+1) / self.epsilon_decay)
+
         p = np.random.random()
         #print(np.array(action_vec, dtype=object))
-        if p < self.epsilon:
+        if p < eps_threshold:
             if state != STATE_TYPE.INIT:
                 return np.random.choice(np.array(action_vec, dtype=object))
             else: 
@@ -636,6 +672,7 @@ class QlAgent(OneShotAgent):
 
     def _q_learning_q_init(self, q_t, price_gap, quantity_gap, unit_price_issue, quantity_issue, action_vec, is_seller=True):
         #DEBUG_PRINT("_q_learning_q_init")
+        min_q = quantity_issue.min_value + (quantity_issue.max_value-quantity_issue.min_value)/2
         for s in [STATE_TYPE.INIT, STATE_TYPE.OPP_COUNTER, STATE_TYPE.END, STATE_TYPE.ACCEPT]:   # , STATE_TYPE.MY_COUNTER     
             if not self.complex_state:
                 q_t[s] = dict()
@@ -648,12 +685,16 @@ class QlAgent(OneShotAgent):
                             for p_so in p_range:
                                 for q_so in q_range:
                                     q_t[(p_s,np.ceil(q_s),p_so,q_so)] = dict()
+                            q_t[(p_s,q_s)] = dict()
+    
             # print(unit_price_issue.min_value, unit_price_issue.max_value, self.price_res)
             # print(quantity_issue.min_value, quantity_issue.max_value, self.quantity_res)
             p_range = np.linspace(unit_price_issue.min_value, unit_price_issue.max_value, self.price_res)
-            q_range = np.linspace(quantity_issue.min_value, quantity_issue.max_value, self.quantity_res)
+            q_range = np.linspace(min_q, quantity_issue.max_value, self.quantity_res)
             for p in p_range:
+                #print(q_t)
                 for q in q_range:
+                    #print(q_t)
                     #print((p,q))
                     if self.smart_init:
                         if is_seller:
@@ -669,6 +710,7 @@ class QlAgent(OneShotAgent):
                                                 for p_so in p_range:
                                                     for q_so in q_range:
                                                         q_t[(p_s,np.ceil(q_s),p_so,q_so)][(p,np.ceil(q))] = 0#10000
+                                                q_t[(p_s,q_s)][(p,np.ceil(q))] = 0   
                             else:
                                 if not self.complex_state:
                                     q_t[s][(p,np.ceil(q))] = 0
@@ -681,6 +723,7 @@ class QlAgent(OneShotAgent):
                                                 for p_so in p_range:
                                                     for q_so in q_range:
                                                         q_t[(p_s,np.ceil(q_s),p_so,q_so)][(p,np.ceil(q))] = 0
+                                                q_t[(p_s,q_s)][(p,np.ceil(q))] = 0  
                         else:
                             if p == p_range[0]:#int(len(p_range)/2)]:
                                 if not self.complex_state:
@@ -694,6 +737,7 @@ class QlAgent(OneShotAgent):
                                                 for p_so in p_range:
                                                     for q_so in q_range:
                                                         q_t[(p_s,np.ceil(q_s),p_so,q_so)][(p,np.ceil(q))] = 0#10000
+                                                q_t[(p_s,q_s)][(p,np.ceil(q))] = 0  
                             else:
                                 if not self.complex_state:
                                     q_t[s][(p,np.ceil(q))] = 0
@@ -706,6 +750,7 @@ class QlAgent(OneShotAgent):
                                                 for p_so in p_range:
                                                     for q_so in q_range:
                                                         q_t[(p_s,np.ceil(q_s),p_so,q_so)][(p,np.ceil(q))] = 0
+                                                q_t[(p_s,q_s)][(p,np.ceil(q))] = 0  
                     else:
                         if not self.complex_state:
                             q_t[s][(p,np.ceil(q))] = 0
@@ -718,6 +763,8 @@ class QlAgent(OneShotAgent):
                                         for p_so in p_range:
                                             for q_so in q_range:
                                                 q_t[(p_s,np.ceil(q_s),p_so,q_so)][(p,np.ceil(q))] = 0
+                                        q_t[(p_s,q_s)][(p,np.ceil(q))] = 0  
+
             
             #if s == STATE_TYPE.OPP_COUNTER:
             if s != STATE_TYPE.INIT:
@@ -731,18 +778,20 @@ class QlAgent(OneShotAgent):
                                 for q_so in q_range:
                                     q_t[(p_s,np.ceil(q_s),p_so,q_so)]["end"] = 0
                                     q_t[(p_s,np.ceil(q_s),p_so,q_so)]["acc"] = 0
-
+                            q_t[(p_s,q_s)]["end"] = 0  
+                            q_t[(p_s,q_s)]["acc"] = 0  
 
         for p in np.linspace(unit_price_issue.min_value, unit_price_issue.max_value, self.price_res):
-            for q in np.linspace(quantity_issue.min_value, quantity_issue.max_value, self.quantity_res):
+            for q in np.linspace(min_q, quantity_issue.max_value, self.quantity_res):
                 action_vec.append((p,np.ceil(q)))
 
         action_vec.append("end")
         action_vec.append("acc")
 
     def _find_state_mapping(self, p, q, po, qo, price_gap, quantity_gap, unit_price_issue, quantity_issue):
+        min_q = quantity_issue.min_value + (quantity_issue.max_value-quantity_issue.min_value)/2
         p_range = np.linspace(unit_price_issue.min_value, unit_price_issue.max_value, self.price_res)
-        q_range = np.linspace(quantity_issue.min_value, quantity_issue.max_value, self.quantity_res)
+        q_range = np.linspace(min_q, quantity_issue.max_value, self.quantity_res)
         return (p, q, self._find_nearest(p_range, po), self._find_nearest(q_range, qo))
 
     def _find_nearest(self, array, value):
@@ -790,8 +839,8 @@ if not TO_SUBMISSION:
     def run(
         competition="oneshot",
         reveal_names=True,
-        n_steps=100,
-        n_configs=1#,
+        n_steps=150,
+        n_configs=4#,
         #controlled_env=True
     ):
         """
@@ -825,8 +874,8 @@ if not TO_SUBMISSION:
                 #SyncRandomOneShotAgent,
                 #SimpleAgent, 
                 # BetterAgent,
-                #AdaptiveAgent,
-                # LearningAgent
+                AdaptiveAgent,
+                LearningAgent
             ]
         else:
             from scml.scml2020.agents import DecentralizingAgent, BuyCheapSellExpensiveAgent
@@ -867,7 +916,7 @@ if not TO_SUBMISSION:
             verbose=True,
             n_steps=n_steps,
             n_configs=n_configs,
-            parallelism="serial",
+            #parallelism="serial",
             compact=True,
             #max_worlds_per_config=1,
             #n_runs_per_world=1,
