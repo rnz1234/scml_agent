@@ -6,7 +6,7 @@ from scml.scml2020 import is_system_agent
 from pprint import pprint
 from scml.oneshot.world import SCML2020OneShotWorld
 from scml.oneshot.world import is_system_agent
-from scml.oneshot import RandomOneShotAgent
+from scml.oneshot import RandomOneShotAgent, SingleAgreementAspirationAgent
 from qlagent import QlAgent
 from agents_pool import *
 from hunteragent import HunterAgent
@@ -31,7 +31,7 @@ def try_agents(agent_types,
                 n_processes=2, 
                 n_trials=1, 
                 draw=True, 
-                n_steps=150, 
+                n_steps=300, 
                 compact=True,
                 n_agents_per_process=1,
                 agent_params=None):
