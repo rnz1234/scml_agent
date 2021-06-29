@@ -31,7 +31,7 @@ def try_agents(agent_types,
                 n_processes=2, 
                 n_trials=1, 
                 draw=True, 
-                n_steps=300, 
+                n_steps=150, 
                 compact=True,
                 n_agents_per_process=1,
                 agent_params=None):

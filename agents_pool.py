@@ -107,6 +107,7 @@ class BetterAgent(SimpleAgent):
         offer[UNIT_PRICE] = self._find_good_price(
             self.get_ami(negotiator_id), state
         )
+        print("Greedy is proposing")
         return tuple(offer)
 
     def respond(self, negotiator_id, state, offer):
@@ -386,6 +387,11 @@ class GreedyOneShotAgent(OneShotAgent):
     def on_negotiation_success(self, contract, mechanism):
         """Record sales/supplies secured"""
         super().on_negotiation_success(contract, mechanism)
+
+        # print("SUCCESS to greedy")
+        # print("Greedy price : " + str(contract.agreement["unit_price"]))
+        # print("Greedy quantity : " + str(contract.agreement["quantity"]))
+        
 
         # update my current best price to use for limiting concession in other
         # negotiations
