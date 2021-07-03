@@ -127,9 +127,9 @@ method for improving : learn how to better allocate quantity per opposite agents
 """
 
 DEBUG = False #True
-DEBUG2 = True
-ENABLE_GRAPH = True #True
-TO_SUBMISSION = False #False
+DEBUG2 = False
+ENABLE_GRAPH = False #True
+TO_SUBMISSION = True #False
 
 if ENABLE_GRAPH:
     import matplotlib
@@ -169,7 +169,7 @@ class STATE_TYPE:
 # TODO : check that on the cases that in propose() and my_needs <= 0, we always go to on_neg_fail / do something equivalent - DONE
 # TODO : take these into account in rewards http://www.yasserm.com/scml/scml2020docs/api/scml.oneshot.OneShotProfile.html?highlight=cost#scml.oneshot.OneShotProfile.cost - DONE
 class QlAgent(OneShotAgent):
-    def init(self, load_q=True, load_q_type="exact", save_q=True, save_q_type="exact", alpha=0.1, prune_quan=0.5, gamma=0.95, price_res=5, quantity_res=5, needs_res=1, epsilon_start=0.001, epsilon_end=0.0001, epsilon_decay=200, smart_init=True, complex_state=True): #, start_price_type=START_PRICE_TYPE.SIMPLE_AVG, price_delta_down=0.5, price_delta_up=1, profit_epsilon=0.1, acceptance_price_th=0.1, acceptance_quantity_th=0.1, cutoff_rate=0.2, cutoff_precentile=0.2, cutoff_stop_amount=1):
+    def init(self, load_q=True, load_q_type="exact", save_q=False, save_q_type="exact", alpha=0.1, prune_quan=1, gamma=0.95, price_res=5, quantity_res=5, needs_res=1, epsilon_start=0.001, epsilon_end=0.0001, epsilon_decay=200, smart_init=True, complex_state=True): #, start_price_type=START_PRICE_TYPE.SIMPLE_AVG, price_delta_down=0.5, price_delta_up=1, profit_epsilon=0.1, acceptance_price_th=0.1, acceptance_quantity_th=0.1, cutoff_rate=0.2, cutoff_precentile=0.2, cutoff_stop_amount=1):
         self.secured = 0 #0.00005
         # self.start_price_type = start_price_type
         # self.price_delta_down = price_delta_down
@@ -963,7 +963,7 @@ class QlAgent(OneShotAgent):
     def _q_learning_q_init(self, q_t, price_gap, quantity_gap, unit_price_issue, quantity_issue, action_vec, is_seller=True, ami=None):
         #DEBUG_PRINT("_q_learning_q_init")
         min_q = quantity_issue.min_value + self.prune_quan*(quantity_issue.max_value-quantity_issue.min_value)/2
-        max_q = quantity_issue.max_value*0.75
+        max_q = quantity_issue.max_value
         p_range = np.linspace(unit_price_issue.min_value, unit_price_issue.max_value, self.price_res)
         my_q_range = np.linspace(min_q, max_q, self.quantity_res)#[0:int(np.ceil(self.quantity_res/5))]
         #print(my_q_range)
@@ -1342,7 +1342,7 @@ if not TO_SUBMISSION:
     def run(
         competition="oneshot",
         reveal_names=True,
-        n_steps=1000,
+        n_steps=200,
         n_configs=1#,
         #controlled_env=True
     ):
@@ -1378,7 +1378,7 @@ if not TO_SUBMISSION:
                 #SimpleAgent, 
                 # BetterAgent,
                 #AdaptiveAgent,
-                GreedyOneShotAgent
+                #GreedyOneShotAgent
             ]
         else:
             from scml.scml2020.agents import DecentralizingAgent, BuyCheapSellExpensiveAgent

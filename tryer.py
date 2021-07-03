@@ -35,7 +35,7 @@ def try_agents(agent_types,
                 n_processes=2, 
                 n_trials=1, 
                 draw=True, 
-                n_steps=10000, 
+                n_steps=1000, 
                 compact=True,
                 n_agents_per_process=1,
                 agent_params=None):
@@ -110,14 +110,14 @@ def print_type_scores(type_scores):
 
 
 
-world, ascores, tscores = try_agent(QlAgent, is_seller=True)
+world, ascores, tscores = try_agent(LearningAgent, is_seller=True)
 #world, ascores, tscores = try_agent(HunterAgent)
 #world, ascores, tscores = try_agent(GreedyOneShotAgent)
 
 print_agent_scores(ascores)
 
-# world, ascores, tscores = try_agent(QlAgent, is_seller=False)
-# #world, ascores, tscores = try_agent(HunterAgent)
-# #world, ascores, tscores = try_agent(GreedyOneShotAgent)
+world, ascores, tscores = try_agent(LearningAgent, is_seller=False)
+#world, ascores, tscores = try_agent(HunterAgent)
+#world, ascores, tscores = try_agent(GreedyOneShotAgent)
 
-# print_agent_scores(ascores)
+print_agent_scores(ascores)
