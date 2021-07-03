@@ -107,7 +107,7 @@ class BetterAgent(SimpleAgent):
         offer[UNIT_PRICE] = self._find_good_price(
             self.get_ami(negotiator_id), state
         )
-        print("Greedy is proposing")
+        #print("Greedy is proposing")
         return tuple(offer)
 
     def respond(self, negotiator_id, state, offer):

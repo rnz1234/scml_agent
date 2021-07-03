@@ -7,7 +7,8 @@ from pprint import pprint
 from scml.oneshot.world import SCML2020OneShotWorld
 from scml.oneshot.world import is_system_agent
 from scml.oneshot import RandomOneShotAgent, SingleAgreementAspirationAgent
-from qlagent import QlAgent
+from qlagent_extended_state import QlAgent
+#from qlagent import QlAgent
 from agents_pool import *
 from hunteragent import HunterAgent
 
@@ -23,15 +24,18 @@ matplotlib.use('TkAgg')
 # LearningAgent
 # AdaptiveAgent
 
-def try_agent(agent_type, n_processes=2):
+def try_agent(agent_type, is_seller=True, n_processes=2):
     """Runs an agent in a world simulation against a randomly behaving agent"""
-    return try_agents([GreedyOneShotAgent, agent_type], n_processes) 
+    if is_seller:
+        return try_agents([agent_type, QlAgent], n_processes)
+    else:
+        return try_agents([QlAgent, agent_type], n_processes) 
 
 def try_agents(agent_types, 
                 n_processes=2, 
                 n_trials=1, 
                 draw=True, 
-                n_steps=150, 
+                n_steps=10000, 
                 compact=True,
                 n_agents_per_process=1,
                 agent_params=None):
@@ -106,8 +110,14 @@ def print_type_scores(type_scores):
 
 
 
-world, ascores, tscores = try_agent(QlAgent)
+world, ascores, tscores = try_agent(QlAgent, is_seller=True)
 #world, ascores, tscores = try_agent(HunterAgent)
 #world, ascores, tscores = try_agent(GreedyOneShotAgent)
 
 print_agent_scores(ascores)
+
+# world, ascores, tscores = try_agent(QlAgent, is_seller=False)
+# #world, ascores, tscores = try_agent(HunterAgent)
+# #world, ascores, tscores = try_agent(GreedyOneShotAgent)
+
+# print_agent_scores(ascores)
