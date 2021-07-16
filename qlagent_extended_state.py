@@ -64,7 +64,7 @@ from scml.oneshot import OneShotAgent
 import itertools
 from scml.oneshot.world import SCML2020OneShotWorld
 from scml.oneshot.world import is_system_agent
-
+import ast
 
 # required for typing
 from typing import Any, Dict, List, Optional
@@ -173,9 +173,9 @@ class QlAgent(OneShotAgent):
                     opp_price_slack=0.0,
                     opp_acc_price_slack=0.2,
                     range_slack = 0.03,
-                    epsilon2_start=0,#0.5,            # epsilon2-greedy start value 
-                    epsilon2_end=0,#0.1,#0.01             # epsilon2-greedy end value
-                    epsilon2_decay=10,              # epsilon2-greedy decay value
+                    epsilon2_start=0.5,            # epsilon2-greedy start value 
+                    epsilon2_end=0.01,#0.1,#0.01             # epsilon2-greedy end value
+                    epsilon2_decay=200,              # epsilon2-greedy decay value
                     *args, **kwargs
                     ):
         super().__init__(*args, **kwargs)
@@ -228,15 +228,19 @@ class QlAgent(OneShotAgent):
         # that's why we have learning database for each type.
         if self.load_q:
             try:
-                with open('q_seller.pickle', 'rb') as handle:
-                    self.learned_q_seller_t = pickle.load(handle)
+                # with open('q_seller.pickle', 'rb') as handle:
+                #     self.learned_q_seller_t = pickle.load(handle)
+                with open('q_seller.txt', 'r') as handle_s:
+                    self.learned_q_seller_t = ast.literal_eval(handle_s.read())
                 DEBUG_PRINT("UPLOADED FROM q_seller.pickle")
             except FileNotFoundError:
                 self.load_q = False
 
             try: 
-                with open('q_buyer.pickle', 'rb') as handle:
-                    self.learned_q_buyer_t = pickle.load(handle)
+                # with open('q_buyer.pickle', 'rb') as handle:
+                #     self.learned_q_buyer_t = pickle.load(handle)
+                with open('q_buyer.txt', 'r') as handle_b:
+                    self.learned_q_buyer_t = ast.literal_eval(handle_b.read())
                 DEBUG_PRINT("UPLOADED FROM q_buyer.pickle")
             except FileNotFoundError:
                 self.load_q = False
@@ -321,7 +325,7 @@ class QlAgent(OneShotAgent):
                     postfix = "_seller"
                 else:
                     postfix = "_buyer"
-                with open('q'+postfix+'.pickle', 'wb') as handle:
+                with open('q'+postfix+'.txt', 'w') as handle: #.pickle
                     if self.save_q_type == "exact":
                         my_q = list(self.q_table_per_opp.values())[0]
                         if self.load_q:
@@ -343,9 +347,12 @@ class QlAgent(OneShotAgent):
                                         for a in self.learned_q_buyer_t[s]:
                                             if a not in my_q[s].keys():
                                                 my_q[s][a] = self.learned_q_buyer_t[s][a]
-                        pickle.dump(my_q, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                        
+                        handle.write(str(my_q))
+                        #pickle.dump(my_q, handle, protocol=pickle.HIGHEST_PROTOCOL)
                     else:
-                        pickle.dump(self.map_q(list(self.q_table_per_opp.values())[0]), handle, protocol=pickle.HIGHEST_PROTOCOL)
+                        handle.write(str(self.map_q(list(self.q_table_per_opp.values())[0])))
+                        #pickle.dump(self.map_q(list(self.q_table_per_opp.values())[0]), handle, protocol=pickle.HIGHEST_PROTOCOL)
             
             # drawing graphs if enabled
             if ENABLE_GRAPH:
@@ -396,6 +403,8 @@ class QlAgent(OneShotAgent):
             partner = contract.annotation["seller"]
             cur_profit = (float(self.awi.current_exogenous_output_price)/self.awi.current_exogenous_output_quantity-contract.agreement["unit_price"]-self.awi.profile.cost)*contract.agreement["quantity"]#*self.awi.current_exogenous_output_quantity
             fctr = -((contract.agreement["unit_price"]))#**2)
+
+        #cur_profit = cur_profit*(1+1.02**(self.num_of_nego_total-100))
 
         DEBUG_PRINT("on_negotiation_success, " + partner)
 
@@ -1180,11 +1189,13 @@ class QlAgent(OneShotAgent):
             #if q_max_greedy:
             #if (self.is_seller and p2 < eps2_threshold) or (not self.is_seller):
             if p2 < eps2_threshold:
+                #print("greedy")
                 if caller == "propose":
                     return self.propose_greedy(negotiator_id, state_sys)
                 if caller == "respond":
                     return self.respond_greedy(negotiator_id, state_sys, offer)
             else:
+                #print("q")
                 # select greedily
                 max_q = max([q[state][action] for action in q[state].keys()])
                 # print([q[state][action] for action in q[state].keys()])
