@@ -41,6 +41,7 @@ class SimpleAgent(OneShotAgent):
 
     def init(self):
         self.secured = 0
+        self.is_seller = True
 
     def step(self):
         self.secured = 0
@@ -88,6 +89,7 @@ class SimpleAgent(OneShotAgent):
                self.secured
 
     def _is_selling(self, ami):
+        self.is_seller = (ami.annotation["product"] == self.awi.my_output_product)
         return ami.annotation["product"] == self.awi.my_output_product
 
 
@@ -201,6 +203,9 @@ class LearningAgent(AdaptiveAgent):
         self._opp_price_slack = opp_price_slack
         self._opp_acc_price_slack = opp_acc_price_slack
         self._range_slack = range_slack
+        self.profit = 0 
+        self.accum_profit = 0
+        self.i_balance = 0
 
     def init(self):
         """Initialize the quantities and best prices received so far"""
@@ -213,13 +218,56 @@ class LearningAgent(AdaptiveAgent):
 
     def step(self):
         """Initialize the quantities and best prices received for next step"""
+        if self.is_seller:
+            too_much_penalty = self.awi.current_shortfall_penalty#, self.awi.profile.shortfall_penalty_dev
+        else:
+            too_much_penalty = self.awi.current_disposal_cost#, self.awi.profile.disposal_cost_dev
+
+        if self.is_seller:
+            too_less_penalty = self.awi.current_disposal_cost#, self.awi.profile.disposal_cost_dev
+        else:
+            too_less_penalty = self.awi.current_shortfall_penalty#, self.awi.profile.shortfall_penalty_dev
+
+
+        if self.awi.current_step == 0:
+            self.i_balance = self.awi.current_balance 
+        
+        # if self.is_seller:
+        #     print("# LE Balance (seller): " + str(self.awi.current_balance-self.i_balance))
+        # else:
+        #     print("# LE Balance (buyer): " + str(self.awi.current_balance-self.i_balance))
+        
+
+        #print("-------------------")
+        #print("QL needed: " + str(self._needed()))
+        if self._needed() < 0:
+            #print("QL profit: " + str(self.profit+self._needed()*penalty))
+            self.accum_profit += self.profit+self._needed()*too_much_penalty
+        else:
+            #print("QL profit: " + str(self.profit-self._needed()*penalty))
+            self.accum_profit += self.profit-self._needed()*too_less_penalty
+        self.profit = 0 
+
+        #print("LE acc. profit: " + str(self.accum_profit))
         super().step()
         self._best_opp_selling = defaultdict(float)
         self._best_opp_buying = defaultdict(lambda: float("inf"))
 
+        
+
     def on_negotiation_success(self, contract, mechanism):
         """Record sales/supplies secured"""
         super().on_negotiation_success(contract, mechanism)
+        if self._is_selling(mechanism):
+            partner = contract.annotation["buyer"]
+            cur_profit = (contract.agreement["unit_price"]-float(self.awi.current_exogenous_input_price)/self.awi.current_exogenous_input_quantity-self.awi.profile.cost)*contract.agreement["quantity"]#-self.awi.current_exogenous_input_price#*self.awi.current_exogenous_input_quantity
+            fctr = ((contract.agreement["unit_price"]))#**2)
+        else:
+            partner = contract.annotation["seller"]
+            cur_profit = (float(self.awi.current_exogenous_output_price)/self.awi.current_exogenous_output_quantity-contract.agreement["unit_price"]-self.awi.profile.cost)*contract.agreement["quantity"]#*self.awi.current_exogenous_output_quantity
+            fctr = -((contract.agreement["unit_price"]))#**2)
+
+        self.profit += cur_profit
 
         # update my current best price to use for limiting concession in other
         # negotiations
@@ -287,6 +335,11 @@ class LearningAgent(AdaptiveAgent):
                 ]
             ))
         return mn, mx
+
+
+
+
+
 
 
 # class DeepSimpleAgent(SimpleAgent):
@@ -366,6 +419,7 @@ class GreedyOneShotAgent(OneShotAgent):
         self._opp_price_slack = opp_price_slack
         self._opp_acc_price_slack = opp_acc_price_slack
         self._range_slack = range_slack
+        
 
     def init(self):
         """Initialize the quantities and best prices received so far"""
@@ -377,6 +431,11 @@ class GreedyOneShotAgent(OneShotAgent):
         self._best_opp_acc_buying = defaultdict(lambda: float("inf"))
         self._sales = self._supplies = 0
 
+        self.profit = 0 
+        self.accum_profit = 0
+        self.is_seller = True
+        self.secured = 0
+
     def step(self):
         """Initialize the quantities and best prices received for next step"""
         self._best_selling, self._best_buying = 0.0, float("inf")
@@ -384,9 +443,37 @@ class GreedyOneShotAgent(OneShotAgent):
         self._best_opp_buying = defaultdict(lambda: float("inf"))
         self._sales = self._supplies = 0
 
+        if self.is_seller:
+            too_much_penalty = self.awi.current_shortfall_penalty#, self.awi.profile.shortfall_penalty_dev
+        else:
+            too_much_penalty = self.awi.current_disposal_cost#, self.awi.profile.disposal_cost_dev
+
+        if self.is_seller:
+            too_less_penalty = self.awi.current_disposal_cost#, self.awi.profile.disposal_cost_dev
+        else:
+            too_less_penalty = self.awi.current_shortfall_penalty#, self.awi.profile.shortfall_penalty_dev
+
+
+        
+
+        #print("-------------------")
+        #print("QL needed: " + str(self._needed()))
+        if self._needed_t() < 0:
+            #print("QL profit: " + str(self.profit+self._needed()*penalty))
+            self.accum_profit += self.profit+self._needed_t()*too_much_penalty
+        else:
+            #print("QL profit: " + str(self.profit-self._needed()*penalty))
+            self.accum_profit += self.profit-self._needed_t()*too_less_penalty
+
+        self.profit = 0 
+        self.secured = 0
+
+        print("GE acc. profit: " + str(self.accum_profit))
+
     def on_negotiation_success(self, contract, mechanism):
         """Record sales/supplies secured"""
         super().on_negotiation_success(contract, mechanism)
+        self.secured += contract.agreement["quantity"]
 
         # print("SUCCESS to greedy")
         # print("Greedy price : " + str(contract.agreement["unit_price"]))
@@ -492,6 +579,7 @@ class GreedyOneShotAgent(OneShotAgent):
     def _is_selling(self, ami):
         if not ami:
             return None
+        self.is_seller = (ami.annotation["product"] == self.awi.my_output_product)
         return ami.annotation["product"] == self.awi.my_output_product
 
     def _is_good_price(self, ami, state, price):
@@ -563,3 +651,8 @@ class GreedyOneShotAgent(OneShotAgent):
     def _th(self, step, n_steps):
         """calculates a descending threshold (0 <= th <= 1)"""
         return ((n_steps - step - 1) / (n_steps - 1)) ** self._e
+
+    def _needed_t(self, negotiator_id=None):
+        return self.awi.current_exogenous_input_quantity + \
+               self.awi.current_exogenous_output_quantity - \
+               self.secured
