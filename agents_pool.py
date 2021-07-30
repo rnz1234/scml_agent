@@ -3,6 +3,7 @@ from scml.oneshot import OneShotAgent
 
 # required for typing
 from typing import Any, Dict, List, Optional
+import matplotlib.pyplot as plt
 
 import numpy as np
 from negmas import (
@@ -110,6 +111,7 @@ class BetterAgent(SimpleAgent):
             self.get_ami(negotiator_id), state
         )
         #print("Greedy is proposing")
+        #print("le prop : ", tuple(offer))
         return tuple(offer)
 
     def respond(self, negotiator_id, state, offer):
@@ -127,6 +129,8 @@ class BetterAgent(SimpleAgent):
         """Checks if a given price is good enough at this stage"""
         mn, mx = self._price_range(ami)
         th = self._th(state.step, ami.n_steps)
+
+        #print(mn,mx,th,mx - price,th * (mx - mn))
         # a good price is one better than the threshold
         if self._is_selling(ami):
             return (price - mn) >= th * (mx - mn)
@@ -137,6 +141,7 @@ class BetterAgent(SimpleAgent):
         """Finds a good-enough price conceding linearly over time"""
         mn, mx = self._price_range(ami)
         th = self._th(state.step, ami.n_steps)
+        
         # offer a price that is around th of your best possible price
         if self._is_selling(ami):
             return mn + th * (mx - mn)
@@ -206,6 +211,8 @@ class LearningAgent(AdaptiveAgent):
         self.profit = 0 
         self.accum_profit = 0
         self.i_balance = 0
+        self.est_profit_series = list()
+        self.real_profit_series = list()
 
     def init(self):
         """Initialize the quantities and best prices received so far"""
@@ -231,6 +238,9 @@ class LearningAgent(AdaptiveAgent):
 
         if self.awi.current_step == 0:
             self.i_balance = self.awi.current_balance 
+        #     self.real_profit_series.append(0)
+        # else:
+        self.real_profit_series.append(self.awi.current_balance-self.i_balance)#-self.i_balance)
         
         # if self.is_seller:
         #     print("# LE Balance (seller): " + str(self.awi.current_balance-self.i_balance))
@@ -247,6 +257,12 @@ class LearningAgent(AdaptiveAgent):
             #print("QL profit: " + str(self.profit-self._needed()*penalty))
             self.accum_profit += self.profit-self._needed()*too_less_penalty
         self.profit = 0 
+
+        # if self.awi.current_step == self.awi.n_steps-2:
+        #     #plt.clf()
+        #     plt.plot(self.real_profit_series, label="real profit le")
+        #     #plt.plot(self.est_profit_series, label="est profit")
+        #     plt.legend(loc='best')
 
         #print("LE acc. profit: " + str(self.accum_profit))
         super().step()
@@ -294,6 +310,8 @@ class LearningAgent(AdaptiveAgent):
         else:
             partner = ami.annotation["seller"]
             self._best_opp_buying[partner] = min(up, self._best_buying)
+
+        #print("le : ", response)
         return response
 
     def _price_range(self, ami):

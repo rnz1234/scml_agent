@@ -25,18 +25,33 @@ matplotlib.use('TkAgg')
 # AdaptiveAgent
 # QlAgent
 
+
+SELF_PLAY = False
+
+if SELF_PLAY:
+    n_steps_sim = 40000
+else:
+    n_steps_sim = 200
+
 def try_agent(agent_type, is_seller=True, n_processes=2):
     """Runs an agent in a world simulation against a randomly behaving agent"""
-    if is_seller:
-        return try_agents([agent_type, LearningAgent], n_processes)
+    if SELF_PLAY:
+        if is_seller:
+            return try_agents([agent_type, QlAgent], n_processes)
+        else:
+            return try_agents([QlAgent, agent_type], n_processes) 
+
     else:
-        return try_agents([LearningAgent, agent_type], n_processes) 
+        if is_seller:
+            return try_agents([agent_type, LearningAgent], n_processes)
+        else:
+            return try_agents([LearningAgent, agent_type], n_processes) 
 
 def try_agents(agent_types, 
                 n_processes=2, 
                 n_trials=1, 
                 draw=False, 
-                n_steps=150, 
+                n_steps=n_steps_sim, 
                 compact=True,
                 n_agents_per_process=1,
                 agent_params=None):
@@ -117,8 +132,9 @@ world, ascores, tscores = try_agent(QlAgent, is_seller=True)
 
 print_agent_scores(ascores)
 
-# world, ascores, tscores = try_agent(QlAgent, is_seller=False)
-# #world, ascores, tscores = try_agent(HunterAgent)
-# #world, ascores, tscores = try_agent(GreedyOneShotAgent)
+if not SELF_PLAY:
+    world, ascores, tscores = try_agent(QlAgent, is_seller=False)
+    #world, ascores, tscores = try_agent(HunterAgent)
+    #world, ascores, tscores = try_agent(GreedyOneShotAgent)
 
-# print_agent_scores(ascores)
+    print_agent_scores(ascores)
